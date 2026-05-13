@@ -56,8 +56,9 @@ def cargar_estado():
         with open(ESTADO_FILE) as f:
             return json.load(f)
     return {
-        'ORB': estado_inicial('ORB'),
-        'ICT': estado_inicial('ICT'),
+        'ORB_LIVE': estado_inicial('ORB_LIVE'),
+        'ORB_SIM':  estado_inicial('ORB_SIM'),
+        'ICT_SIM':  estado_inicial('ICT_SIM'),
     }
 
 
@@ -144,7 +145,8 @@ def generar_reporte(estado, dia_str, trades_cerrados_hoy):
         '',
     ]
 
-    for estrategia in ['ORB', 'ICT']:
+    estrategias_reporte = ['ORB_LIVE'] if LIVE_MODE else ['ORB_SIM', 'ICT_SIM']
+    for estrategia in estrategias_reporte:
         c = estado[estrategia]
         ganancia_total = c['ganancia_total']
         capital        = c['capital']
@@ -203,19 +205,22 @@ def generar_reporte(estado, dia_str, trades_cerrados_hoy):
 
         lineas.append('')
 
-    capital_orb = estado['ORB']['capital']
-    capital_ict = estado['ICT']['capital']
-    gan_orb     = estado['ORB']['ganancia_total']
-    gan_ict     = estado['ICT']['ganancia_total']
+    claves = ['ORB_LIVE'] if LIVE_MODE else ['ORB_SIM', 'ICT_SIM']
+    total_capital = sum(estado[k]['capital']        for k in claves if k in estado)
+    total_gan     = sum(estado[k]['ganancia_total'] for k in claves if k in estado)
 
     lineas += [
         '---',
         '## Resumen combinado',
         '| Cuenta | Capital | Ganancia | Estado |',
         '|---|---|---|---|',
-        '| ORB | $%.0f | $%+.0f | %s |' % (capital_orb, gan_orb, estado['ORB']['estado']),
-        '| ICT | $%.0f | $%+.0f | %s |' % (capital_ict, gan_ict, estado['ICT']['estado']),
-        '| **Total** | **$%.0f** | **$%+.0f** | |' % (capital_orb + capital_ict, gan_orb + gan_ict),
+    ]
+    for k in claves:
+        if k in estado:
+            lineas.append('| %s | $%.0f | $%+.0f | %s |' % (
+                k, estado[k]['capital'], estado[k]['ganancia_total'], estado[k]['estado']))
+    lineas += [
+        '| **Total** | **$%.0f** | **$%+.0f** | |' % (total_capital, total_gan),
         '',
         '*Actualizado — %s*' % datetime.now(ET).strftime('%Y-%m-%d %H:%M ET'),
     ]
@@ -280,8 +285,7 @@ def main():
 
     trades_cerrados_hoy = {}
 
-    # En modo live solo opera ORB
-    estrategias_activas = ['ORB'] if LIVE_MODE else ['ORB', 'ICT']
+    estrategias_activas = ['ORB_LIVE'] if LIVE_MODE else ['ORB_SIM', 'ICT_SIM']
 
     for estrategia in estrategias_activas:
         c = estado[estrategia]
@@ -327,7 +331,7 @@ def main():
 
         # ── Buscar entrada nueva ──
         elif c.get('ya_opero_hoy') != dia_str:
-            if estrategia == 'ORB':
+            if estrategia in ('ORB_LIVE', 'ORB_SIM'):
                 entry, orb_sizes_nuevos, motivo = signal_orb_entry(
                     df_hasta_ahora, hoy, c['capital'], c['orb_sizes'])
                 estado[estrategia]['orb_sizes'] = orb_sizes_nuevos[-20:]
@@ -367,11 +371,10 @@ def main():
     generar_reporte(estado, dia_str, trades_cerrados_hoy)
 
     print('\n' + '=' * 60)
-    print('  ORB: $%+.0f | ICT: $%+.0f | Total: $%+.0f' % (
-        estado['ORB']['ganancia_total'],
-        estado['ICT']['ganancia_total'],
-        estado['ORB']['ganancia_total'] + estado['ICT']['ganancia_total'],
-    ))
+    for k in claves:
+        if k in estado:
+            print('  %s: $%+.0f' % (k, estado[k]['ganancia_total']))
+    print('  TOTAL: $%+.0f' % total_gan)
     print('=' * 60)
 
 

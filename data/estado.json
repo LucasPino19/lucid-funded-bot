@@ -1,24 +1,6 @@
 {
-  "ORB": {
-    "estrategia": "ORB",
-    "cuenta": "25k",
-    "capital_inicial": 25000,
-    "capital": 25000,
-    "ganancia_total": 0.0,
-    "ganancia_por_dia": {},
-    "trades": [],
-    "estado": "activa",
-    "razon_fin": "",
-    "consecutivas_hoy": 0,
-    "ultimo_dia": "",
-    "orb_sizes": [
-      5.5,
-      5.5
-    ],
-    "obs_usados": []
-  },
-  "ICT": {
-    "estrategia": "ICT",
+  "ORB_LIVE": {
+    "estrategia": "ORB_LIVE",
     "cuenta": "25k",
     "capital_inicial": 25000,
     "capital": 25000,
@@ -30,6 +12,42 @@
     "consecutivas_hoy": 0,
     "ultimo_dia": "",
     "orb_sizes": [],
-    "obs_usados": []
+    "obs_usados": [],
+    "posicion_abierta": null,
+    "ya_opero_hoy": ""
+  },
+  "ORB_SIM": {
+    "estrategia": "ORB_SIM",
+    "cuenta": "25k",
+    "capital_inicial": 25000,
+    "capital": 25000,
+    "ganancia_total": 0.0,
+    "ganancia_por_dia": {},
+    "trades": [],
+    "estado": "activa",
+    "razon_fin": "",
+    "consecutivas_hoy": 0,
+    "ultimo_dia": "",
+    "orb_sizes": [],
+    "obs_usados": [],
+    "posicion_abierta": null,
+    "ya_opero_hoy": ""
+  },
+  "ICT_SIM": {
+    "estrategia": "ICT_SIM",
+    "cuenta": "25k",
+    "capital_inicial": 25000,
+    "capital": 25000,
+    "ganancia_total": 0.0,
+    "ganancia_por_dia": {},
+    "trades": [],
+    "estado": "activa",
+    "razon_fin": "",
+    "consecutivas_hoy": 0,
+    "ultimo_dia": "",
+    "orb_sizes": [],
+    "obs_usados": [],
+    "posicion_abierta": null,
+    "ya_opero_hoy": ""
   }
 }
