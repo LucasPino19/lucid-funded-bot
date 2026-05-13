@@ -99,9 +99,15 @@ def aplicar_reglas(cuenta_estado, dia_str):
         return 'explotada', 'Drawdown alcanzado — capital: $%.0f | limite: $%.0f' % (capital, limite_drawdown)
 
     if ganancia_total >= PLAN['profit_target']:
-        max_dia = max(gan_por_dia.values()) if gan_por_dia else 0
-        if ganancia_total > 0 and max_dia / ganancia_total <= 0.50:
-            return 'pasada', 'Target alcanzado: $%+.0f en %d trades' % (ganancia_total, len(trades))
+        max_dia    = max(gan_por_dia.values()) if gan_por_dia else 0
+        dias_op    = len(gan_por_dia)
+        consistencia_ok = ganancia_total > 0 and max_dia / ganancia_total <= 0.50
+        min_dias_ok     = dias_op >= 2
+
+        if consistencia_ok and min_dias_ok:
+            return 'pasada', 'Target alcanzado: $%+.0f en %d dias / %d trades' % (ganancia_total, dias_op, len(trades))
+        if not min_dias_ok:
+            return 'activa', 'Target alcanzado pero faltan dias de trading (%d/2 minimo)' % dias_op
         return 'activa', 'Target alcanzado pero consistencia viola 50%% — dia max: $%.0f / total: $%.0f' % (max_dia, ganancia_total)
 
     return 'activa', ''
