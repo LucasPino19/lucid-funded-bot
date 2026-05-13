@@ -350,3 +350,241 @@ def signal_ict(df_completo, fecha_hoy, capital, obs_usados):
                 }, obs_usados_nuevos, None
 
     return None, obs_usados, 'Sin OB válido tocado hoy'
+
+
+# ══════════════════════════════════════════════
+# MODO INTRADAY — entry en tiempo real
+# ══════════════════════════════════════════════
+
+def signal_orb_entry(df_completo, fecha_hoy, capital, orb_sizes_hist):
+    """
+    Verifica si la última vela completa de hoy genera entrada ORB.
+    Solo mira la vela más reciente (no simula el día entero).
+    """
+    max_c = PLANES[CUENTA]['max_contratos']
+
+    adx_ayer = calcular_adx_ayer(df_completo)
+    if adx_ayer < ADX_MIN and adx_ayer > 0:
+        return None, orb_sizes_hist, 'ADX %.1f < %d' % (adx_ayer, ADX_MIN)
+
+    vwap_vals = calcular_vwap(df_completo)
+    closes    = df_completo['Close'].values
+    highs     = df_completo['High'].values
+    lows      = df_completo['Low'].values
+    fechas    = df_completo.index
+
+    indices_hoy = [i for i, ts in enumerate(fechas)
+                   if ts.astimezone(ET).date() == fecha_hoy]
+
+    if len(indices_hoy) < 2:
+        return None, orb_sizes_hist, 'Necesito >= 2 velas del dia'
+
+    i0       = indices_hoy[0]
+    orb_high = highs[i0]
+    orb_low  = lows[i0]
+    orb_size = orb_high - orb_low
+
+    if orb_size <= 0:
+        return None, orb_sizes_hist, 'ORB size = 0'
+
+    sizes_nuevos = orb_sizes_hist.copy()
+    if len(orb_sizes_hist) >= 5:
+        promedio = np.mean(orb_sizes_hist[-10:])
+        if orb_size > promedio * ORB_VOLT_FILTRO:
+            sizes_nuevos.append(orb_size)
+            return None, sizes_nuevos, 'Volatilidad extrema'
+    sizes_nuevos.append(orb_size)
+
+    stop_dist   = orb_size * ORB_STOP_MULT
+    target_dist = orb_size * ORB_TARGET_MULT
+
+    i       = indices_hoy[-1]
+    hora_et = fechas[i].astimezone(ET)
+
+    if hora_et.hour > ORB_VENTANA_H or (hora_et.hour == ORB_VENTANA_H and hora_et.minute >= ORB_VENTANA_M):
+        return None, sizes_nuevos, 'Fuera de ventana ORB (1:30pm ET)'
+    if hora_et.hour > CIERRE_HORA or (hora_et.hour == CIERRE_HORA and hora_et.minute >= CIERRE_MIN):
+        return None, sizes_nuevos, 'Mercado cerrado'
+
+    precio  = closes[i]
+    vwap_i  = vwap_vals[i]
+    entrada = None
+
+    if closes[i] > orb_high and precio > vwap_i:
+        entrada   = orb_high
+        sl        = entrada - stop_dist
+        tp        = entrada + target_dist
+        direccion = 'LONG'
+    elif closes[i] < orb_low and precio < vwap_i:
+        entrada   = orb_low
+        sl        = entrada + stop_dist
+        tp        = entrada - target_dist
+        direccion = 'SHORT'
+
+    if entrada is None:
+        return None, sizes_nuevos, 'Sin senal en ultima vela'
+
+    riesgo_usd      = capital * RIESGO_PCT
+    riesgo_puntos   = abs(entrada - sl)
+    riesgo_contrato = riesgo_puntos * MULT
+    if riesgo_contrato == 0 or riesgo_contrato > riesgo_usd:
+        return None, sizes_nuevos, 'Riesgo fuera de rango'
+    contratos = min(max(1, int(riesgo_usd / riesgo_contrato)), max_c)
+
+    return {
+        'estrategia': 'ORB',
+        'direccion':  direccion,
+        'entrada':    round(entrada, 2),
+        'sl':         round(sl, 2),
+        'tp':         round(tp, 2),
+        'contratos':  contratos,
+        'orb_size':   round(orb_size, 2),
+        'adx':        round(adx_ayer, 1),
+    }, sizes_nuevos, None
+
+
+def signal_ict_entry(df_completo, fecha_hoy, capital, obs_usados):
+    """
+    Verifica si la última vela completa de hoy genera entrada ICT.
+    """
+    max_c = PLANES[CUENTA]['max_contratos']
+
+    vwap_vals = calcular_vwap(df_completo)
+    closes    = df_completo['Close'].values
+    highs     = df_completo['High'].values
+    lows      = df_completo['Low'].values
+    fechas    = df_completo.index
+
+    ob_bull, ob_bear = detectar_obs(df_completo)
+
+    indices_hoy = [i for i, ts in enumerate(fechas)
+                   if ts.astimezone(ET).date() == fecha_hoy
+                   and not (ts.astimezone(ET).hour > CIERRE_HORA or
+                            (ts.astimezone(ET).hour == CIERRE_HORA and
+                             ts.astimezone(ET).minute >= CIERRE_MIN))]
+
+    if not indices_hoy:
+        return None, obs_usados, 'Sin datos para hoy'
+
+    j      = indices_hoy[-1]
+    vwap_j = vwap_vals[j]
+
+    for ob_list, tipo in [(ob_bull, 'bull'), (ob_bear, 'bear')]:
+        for ob in ob_list:
+            idx     = ob['indice']
+            ob_high = ob['ob_high']
+            ob_low  = ob['ob_low']
+            ob_size = ob_high - ob_low
+            clave   = '%d_%s' % (idx, tipo)
+
+            if clave in obs_usados or ob_size <= 0 or j <= idx + 3:
+                continue
+
+            entrada = None
+
+            if (tipo == 'bull'
+                    and lows[j] <= ob_high and highs[j] >= ob_low
+                    and closes[j] > vwap_j):
+                entrada   = ob_high
+                sl        = ob_low - ob_size * ICT_STOP_MULT
+                tp        = ob_high + ob_size * ICT_TARGET_MULT
+                direccion = 'LONG'
+
+            elif (tipo == 'bear'
+                    and highs[j] >= ob_low and lows[j] <= ob_high
+                    and closes[j] < vwap_j):
+                entrada   = ob_low
+                sl        = ob_high + ob_size * ICT_STOP_MULT
+                tp        = ob_low  - ob_size * ICT_TARGET_MULT
+                direccion = 'SHORT'
+
+            if entrada is None:
+                continue
+
+            riesgo_usd      = capital * RIESGO_PCT
+            riesgo_puntos   = abs(entrada - sl)
+            riesgo_contrato = riesgo_puntos * MULT
+            if riesgo_contrato == 0 or riesgo_contrato > riesgo_usd:
+                continue
+            contratos = min(max(1, int(riesgo_usd / riesgo_contrato)), max_c)
+
+            obs_usados_nuevos = obs_usados | {clave}
+            return {
+                'estrategia': 'ICT',
+                'ob_clave':   clave,
+                'tipo_ob':    tipo,
+                'direccion':  direccion,
+                'entrada':    round(entrada, 2),
+                'sl':         round(sl, 2),
+                'tp':         round(tp, 2),
+                'contratos':  contratos,
+                'ob_size':    round(ob_size, 2),
+            }, obs_usados_nuevos, None
+
+    return None, obs_usados, 'Sin OB tocado en ultima vela'
+
+
+def gestionar_posicion(posicion, df_completo, fecha_hoy):
+    """
+    Revisa todas las velas de hoy en orden para ver si la posición abierta
+    tocó stop o target. Devuelve el trade cerrado o None si sigue abierto.
+    """
+    fechas = df_completo.index
+    highs  = df_completo['High'].values
+    lows   = df_completo['Low'].values
+    closes = df_completo['Close'].values
+
+    direccion = posicion['direccion']
+    sl        = posicion['sl']
+    tp        = posicion['tp']
+    entrada   = posicion['entrada']
+    contratos = posicion['contratos']
+
+    indices_hoy = [i for i, ts in enumerate(fechas)
+                   if ts.astimezone(ET).date() == fecha_hoy]
+
+    if not indices_hoy:
+        return None
+
+    for i in indices_hoy:
+        hora_et     = fechas[i].astimezone(ET)
+        force_close = (hora_et.hour > CIERRE_HORA or
+                       (hora_et.hour == CIERRE_HORA and hora_et.minute >= CIERRE_MIN))
+
+        resultado     = None
+        precio_salida = None
+
+        if force_close:
+            resultado     = 'timeout'
+            precio_salida = closes[i]
+        elif direccion == 'LONG':
+            if lows[i] <= sl:
+                resultado     = 'stop_loss'
+                precio_salida = sl
+            elif highs[i] >= tp:
+                resultado     = 'take_profit'
+                precio_salida = tp
+        else:
+            if highs[i] >= sl:
+                resultado     = 'stop_loss'
+                precio_salida = sl
+            elif lows[i] <= tp:
+                resultado     = 'take_profit'
+                precio_salida = tp
+
+        if resultado is None:
+            continue
+
+        puntos, ganancia = _calcular_trade(
+            None, entrada, sl, direccion, resultado, precio_salida, contratos
+        )
+
+        return {
+            **posicion,
+            'salida':    round(precio_salida, 2),
+            'resultado': resultado,
+            'puntos':    puntos,
+            'ganancia':  ganancia,
+        }
+
+    return None

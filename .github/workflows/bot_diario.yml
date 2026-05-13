@@ -1,11 +1,11 @@
-name: LucidFlex Bot Diario
+name: LucidFlex Bot Intraday
 
 on:
   schedule:
-    # Corre a las 10pm ET (22:00 ET = 03:00 UTC del día siguiente)
-    # Mercado cierra 4pm ET, datos disponibles ~5pm ET
-    - cron: '0 3 * * 2-6'   # martes-sábado UTC = lunes-viernes ET
-  workflow_dispatch:          # permite correrlo manualmente desde GitHub
+    # Corre cada hora de 10:35am a 4:35pm ET (lunes a viernes)
+    # ET = UTC-4 (EDT) — 10:35am ET = 14:35 UTC
+    - cron: '35 14-20 * * 1-5'
+  workflow_dispatch:
 
 jobs:
   run-bot:
@@ -36,5 +36,5 @@ jobs:
           git config user.name  "LucidFlex Bot"
           git config user.email "bot@lucid"
           git add data/estado.json reports/
-          git diff --staged --quiet || git commit -m "bot: reporte $(date +'%Y-%m-%d')"
+          git diff --staged --quiet || git commit -m "bot: run $(date +'%Y-%m-%d %H:%M UTC')"
           git push
