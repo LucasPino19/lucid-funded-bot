@@ -30,6 +30,10 @@ jobs:
 
       - name: Correr bot
         run: python bot.py
+        env:
+          LIVE_MODE:     ${{ secrets.LIVE_MODE }}
+          RITHMIC_USER:  ${{ secrets.RITHMIC_USER }}
+          RITHMIC_PASS:  ${{ secrets.RITHMIC_PASS }}
 
       - name: Guardar estado y reporte en el repo
         run: |
