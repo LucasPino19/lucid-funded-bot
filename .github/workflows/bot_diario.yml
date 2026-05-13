@@ -31,7 +31,7 @@ jobs:
       - name: Correr bot
         run: python bot.py
         env:
-          LIVE_MODE:     ${{ secrets.LIVE_MODE }}
+          LIVE_MODE:     'true'
           RITHMIC_USER:  ${{ secrets.RITHMIC_USER }}
           RITHMIC_PASS:  ${{ secrets.RITHMIC_PASS }}
 
