@@ -10,6 +10,7 @@ PLANES = {
         'capital_inicial': 25_000,
         'profit_target':    1_250,   # +5% para pasar (LucidFlex 25K Flex Eval)
         'max_drawdown':     1_000,   # -4% → explota
+        'mll_lock':           100,   # MLL se congela en capital_inicial - 100 cuando supera ITB
         'max_contratos':       20,   # 20 MES (equivale a 2 ES mini)
         'fee_evaluacion':      75,   # precio sin descuento
     },
@@ -17,7 +18,8 @@ PLANES = {
         'capital_inicial': 50_000,
         'profit_target':    3_000,
         'max_drawdown':     2_000,
-        'max_contratos':       10,
+        'mll_lock':           100,   # MLL se congela en capital_inicial - 100 cuando supera ITB
+        'max_contratos':       40,   # 40 MES (equivale a 4 ES mini)
         'fee_evaluacion':     175,
     },
 }

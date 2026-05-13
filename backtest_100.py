@@ -26,6 +26,8 @@ ET        = ZoneInfo("America/New_York")
 CAPITAL_0 = float(PLANES[CUENTA]['capital_inicial'])
 TARGET    = PLANES[CUENTA]['profit_target']
 DRAWDOWN  = PLANES[CUENTA]['max_drawdown']
+ITB       = CAPITAL_0 + TARGET                     # Initial Trail Balance
+MLL_FIJO  = CAPITAL_0 - PLANES[CUENTA]['mll_lock'] # MLL congelado una vez que supera ITB
 N_CUENTAS = 100
 WARMUP    = 30   # dias de warmup para ADX
 SEED      = int(sys.argv[1]) if len(sys.argv) > 1 else int(time.time())
@@ -125,14 +127,15 @@ def main():
                 capital      += ganancia_real
                 trades       += 1
 
-            # Trailing drawdown: el peak sube con las ganancias EOD, nunca baja
+            # Trailing drawdown EOD con ITB lock (regla real LucidFlex)
             peak = max(peak, capital)
+            limite = MLL_FIJO if peak >= ITB else peak - DRAWDOWN
 
             pnl = capital - CAPITAL_0
             if pnl >= TARGET:
                 resultado_final = 'PASADA'
                 break
-            if capital <= peak - DRAWDOWN:
+            if capital <= limite:
                 resultado_final = 'EXPLOTADA'
                 break
 

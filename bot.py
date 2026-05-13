@@ -80,13 +80,23 @@ def aplicar_reglas(cuenta_estado, dia_str):
     gan_por_dia    = cuenta_estado['ganancia_por_dia']
     trades         = cuenta_estado['trades']
 
-    # Actualizar peak EOD (trailing drawdown: el límite sube con las ganancias, nunca baja)
-    peak = max(cuenta_estado.get('peak_capital', PLAN['capital_inicial']), capital)
+    # Trailing drawdown EOD con ITB lock (regla real LucidFlex)
+    # Fase 1: MLL sube con el peak EOD (trailing activo)
+    # Fase 2: cuando capital supera ITB, MLL se congela en capital_inicial - mll_lock para siempre
+    capital_inicial = PLAN['capital_inicial']
+    itb             = capital_inicial + PLAN['profit_target']   # Initial Trail Balance
+    mll_fijo        = capital_inicial - PLAN['mll_lock']        # $24,900 para 25k
+
+    peak = max(cuenta_estado.get('peak_capital', capital_inicial), capital)
     cuenta_estado['peak_capital'] = peak
-    limite_drawdown = peak - PLAN['max_drawdown']
+
+    if peak >= itb:
+        limite_drawdown = mll_fijo   # MLL congelado
+    else:
+        limite_drawdown = peak - PLAN['max_drawdown']   # MLL trailing
 
     if capital <= limite_drawdown:
-        return 'explotada', 'Trailing drawdown alcanzado — capital: $%.0f | limite: $%.0f' % (capital, limite_drawdown)
+        return 'explotada', 'Drawdown alcanzado — capital: $%.0f | limite: $%.0f' % (capital, limite_drawdown)
 
     if ganancia_total >= PLAN['profit_target']:
         max_dia = max(gan_por_dia.values()) if gan_por_dia else 0
