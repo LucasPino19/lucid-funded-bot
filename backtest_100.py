@@ -97,6 +97,7 @@ def main():
     for idx, start in enumerate(starts):
         rng       = random.Random(rng_global.randint(0, 999999))
         capital   = CAPITAL_0
+        peak      = CAPITAL_0   # trailing drawdown EOD
         orb_sizes = []
         resultado_final = 'INCOMPLETA'
         trades    = 0
@@ -124,11 +125,14 @@ def main():
                 capital      += ganancia_real
                 trades       += 1
 
+            # Trailing drawdown: el peak sube con las ganancias EOD, nunca baja
+            peak = max(peak, capital)
+
             pnl = capital - CAPITAL_0
             if pnl >= TARGET:
                 resultado_final = 'PASADA'
                 break
-            if pnl <= -DRAWDOWN:
+            if capital <= peak - DRAWDOWN:
                 resultado_final = 'EXPLOTADA'
                 break
 

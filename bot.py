@@ -48,6 +48,7 @@ def estado_inicial(estrategia):
         'obs_usados':       [],
         'posicion_abierta': None,   # posicion open intraday
         'ya_opero_hoy':     '',     # fecha del ultimo trade del dia
+        'peak_capital':     PLAN['capital_inicial'],  # trailing drawdown EOD
     }
 
 
@@ -79,8 +80,13 @@ def aplicar_reglas(cuenta_estado, dia_str):
     gan_por_dia    = cuenta_estado['ganancia_por_dia']
     trades         = cuenta_estado['trades']
 
-    if capital <= PLAN['capital_inicial'] - PLAN['max_drawdown']:
-        return 'explotada', 'Drawdown maximo alcanzado — capital: $%.0f' % capital
+    # Actualizar peak EOD (trailing drawdown: el límite sube con las ganancias, nunca baja)
+    peak = max(cuenta_estado.get('peak_capital', PLAN['capital_inicial']), capital)
+    cuenta_estado['peak_capital'] = peak
+    limite_drawdown = peak - PLAN['max_drawdown']
+
+    if capital <= limite_drawdown:
+        return 'explotada', 'Trailing drawdown alcanzado — capital: $%.0f | limite: $%.0f' % (capital, limite_drawdown)
 
     if ganancia_total >= PLAN['profit_target']:
         max_dia = max(gan_por_dia.values()) if gan_por_dia else 0
