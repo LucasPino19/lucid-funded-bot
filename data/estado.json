@@ -1,0 +1,32 @@
+{
+  "ORB": {
+    "estrategia": "ORB",
+    "cuenta": "25k",
+    "capital_inicial": 25000,
+    "capital": 25000,
+    "ganancia_total": 0.0,
+    "ganancia_por_dia": {},
+    "trades": [],
+    "estado": "activa",
+    "razon_fin": "",
+    "consecutivas_hoy": 0,
+    "ultimo_dia": "",
+    "orb_sizes": [],
+    "obs_usados": []
+  },
+  "ICT": {
+    "estrategia": "ICT",
+    "cuenta": "25k",
+    "capital_inicial": 25000,
+    "capital": 25000,
+    "ganancia_total": 0.0,
+    "ganancia_por_dia": {},
+    "trades": [],
+    "estado": "activa",
+    "razon_fin": "",
+    "consecutivas_hoy": 0,
+    "ultimo_dia": "",
+    "orb_sizes": [],
+    "obs_usados": []
+  }
+}
