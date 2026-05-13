@@ -49,6 +49,13 @@ CIERRE_HORA = 16        # cerrar todo antes de las 4:30pm ET (límite real: 4:45
 CIERRE_MIN  = 30
 MAX_CONSEC_PERDIDAS = 2 # circuit breaker: parar si 2 pérdidas seguidas en el día
 
+# ── Live execution ──
+# Actualizar cada vez que ruede el contrato (Mar/Jun/Sep/Dec)
+SYMBOL_LIVE    = 'ESM6'       # contrato activo en Rithmic
+EXCHANGE_LIVE  = 'CME'
+RITHMIC_SYSTEM = 'Lucid Trading'
+TICK_SIZE      = 0.25         # 1 tick ES = $12.50
+
 # ── Paths ──
 ESTADO_FILE = 'data/estado.json'
 REPORTS_DIR = 'reports'

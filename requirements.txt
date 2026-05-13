@@ -1,3 +1,4 @@
 yfinance>=0.2.36
 numpy>=1.24
 pandas>=2.0
+async-rithmic>=1.2.7

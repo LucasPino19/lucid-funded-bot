@@ -14,8 +14,13 @@ from zoneinfo import ZoneInfo
 import yfinance as yf
 
 from config import (CUENTA, PLANES, TICKER, ESTADO_FILE, REPORTS_DIR,
-                    MAX_CONSEC_PERDIDAS)
+                    MAX_CONSEC_PERDIDAS, CIERRE_HORA, CIERRE_MIN)
 from estrategias import signal_orb_entry, signal_ict_entry, gestionar_posicion
+
+# LIVE_MODE=true → ejecuta ordenes reales via Rithmic
+LIVE_MODE = os.environ.get('LIVE_MODE', 'false').lower() == 'true'
+if LIVE_MODE:
+    from live_exec import submit_bracket_entry, get_open_position, flatten_position
 
 ET   = ZoneInfo("America/New_York")
 PLAN = PLANES[CUENTA]
@@ -275,7 +280,10 @@ def main():
 
     trades_cerrados_hoy = {}
 
-    for estrategia in ['ORB', 'ICT']:
+    # En modo live solo opera ORB
+    estrategias_activas = ['ORB'] if LIVE_MODE else ['ORB', 'ICT']
+
+    for estrategia in estrategias_activas:
         c = estado[estrategia]
 
         print('\n[%s] Estado: %s | Capital: $%.0f | Ganancia: $%+.0f' % (
@@ -290,6 +298,16 @@ def main():
                 c['consecutivas_hoy'] >= MAX_CONSEC_PERDIDAS):
             print('[%s] Circuit breaker — %d perdidas hoy.' % (estrategia, MAX_CONSEC_PERDIDAS))
             continue
+
+        # ── EOD: cerrar posicion real si es tarde ──
+        es_eod = (ahora_et.hour > CIERRE_HORA or
+                  (ahora_et.hour == CIERRE_HORA and ahora_et.minute >= CIERRE_MIN))
+        if LIVE_MODE and c.get('posicion_abierta') and es_eod:
+            pos = c['posicion_abierta']
+            qty_real, dir_real = get_open_position()
+            if qty_real > 0:
+                print('[%s] EOD — cerrando posicion real %s x%d' % (estrategia, dir_real, qty_real))
+                flatten_position(qty_real, dir_real)
 
         # ── Gestionar posicion abierta ──
         if c.get('posicion_abierta'):
@@ -314,6 +332,12 @@ def main():
                     df_hasta_ahora, hoy, c['capital'], c['orb_sizes'])
                 estado[estrategia]['orb_sizes'] = orb_sizes_nuevos[-20:]
                 if entry:
+                    if LIVE_MODE:
+                        order_id = submit_bracket_entry(entry)
+                        if order_id is None:
+                            print('[ORB] Orden rechazada — no se registra posicion.')
+                            continue
+                        entry['order_id'] = order_id
                     estado[estrategia]['posicion_abierta'] = entry
                     estado[estrategia]['ya_opero_hoy']     = dia_str
                     print('[ORB] ENTRADA: %s | %.2f | SL %.2f | TP %.2f | %d contratos' % (
