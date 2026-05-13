@@ -1,0 +1,40 @@
+name: LucidFlex Bot Diario
+
+on:
+  schedule:
+    # Corre a las 10pm ET (22:00 ET = 03:00 UTC del día siguiente)
+    # Mercado cierra 4pm ET, datos disponibles ~5pm ET
+    - cron: '0 3 * * 2-6'   # martes-sábado UTC = lunes-viernes ET
+  workflow_dispatch:          # permite correrlo manualmente desde GitHub
+
+jobs:
+  run-bot:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Instalar dependencias
+        run: pip install -r requirements.txt
+
+      - name: Crear carpetas necesarias
+        run: |
+          mkdir -p data
+          mkdir -p reports
+
+      - name: Correr bot
+        run: python bot.py
+
+      - name: Guardar estado y reporte en el repo
+        run: |
+          git config user.name  "LucidFlex Bot"
+          git config user.email "bot@lucid"
+          git add data/estado.json reports/
+          git diff --staged --quiet || git commit -m "bot: reporte $(date +'%Y-%m-%d')"
+          git push
