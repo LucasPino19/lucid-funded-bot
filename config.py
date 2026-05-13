@@ -8,7 +8,7 @@ CUENTA = '25k'
 PLANES = {
     '25k': {
         'capital_inicial': 25_000,
-        'profit_target':    1_500,   # +6% para pasar
+        'profit_target':    1_250,   # +5% para pasar (LucidFlex 25K Flex Eval)
         'max_drawdown':     1_000,   # -4% → explota
         'max_contratos':        2,   # límite de LucidFlex
         'fee_evaluacion':      75,   # precio sin descuento
