@@ -254,7 +254,7 @@ def main():
     estado = cargar_estado()
 
     # Cerrar posiciones huerfanas de dias anteriores
-    for est in ['ORB', 'ICT']:
+    for est in list(estado.keys()):
         if (estado[est].get('posicion_abierta') and
                 estado[est].get('ya_opero_hoy', '') < dia_str):
             print('[%s] Posicion de dia anterior detectada — limpiando.' % est)
@@ -400,10 +400,12 @@ def main():
     generar_reporte(estado, dia_str, trades_cerrados_hoy)
 
     print('\n' + '=' * 60)
-    for k in claves:
+    estrategias_resumen = ['ORB_LIVE'] if LIVE_MODE else ['ORB_SIM', 'ICT_SIM']
+    total_gan_resumen = sum(estado[k]['ganancia_total'] for k in estrategias_resumen if k in estado)
+    for k in estrategias_resumen:
         if k in estado:
             print('  %s: $%+.0f' % (k, estado[k]['ganancia_total']))
-    print('  TOTAL: $%+.0f' % total_gan)
+    print('  TOTAL: $%+.0f' % total_gan_resumen)
     print('=' * 60)
 
 
