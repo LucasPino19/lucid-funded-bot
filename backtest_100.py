@@ -6,9 +6,12 @@ Aplica ajustes realistas: slippage variable, SL gap, TP miss,
 eventos inesperados y fallas de conexion.
 
 Uso:
-    python3 backtest_100.py
+    python3 backtest_100.py           # seed aleatorio
+    python3 backtest_100.py 42        # seed fijo (reproducible)
 """
 
+import sys
+import time
 import yfinance as yf
 import pandas as pd
 import numpy as np
@@ -25,7 +28,7 @@ TARGET    = PLANES[CUENTA]['profit_target']
 DRAWDOWN  = PLANES[CUENTA]['max_drawdown']
 N_CUENTAS = 100
 WARMUP    = 30   # dias de warmup para ADX
-SEED      = 42
+SEED      = int(sys.argv[1]) if len(sys.argv) > 1 else int(time.time())
 
 
 def ajustar_realismo(trade, rng):
@@ -61,6 +64,7 @@ def ajustar_realismo(trade, rng):
 
 
 def main():
+    print("Seed: %d  (para reproducir: python3 backtest_100.py %d)" % (SEED, SEED))
     print("Descargando datos MES=F (2 anos de datos 1h)...")
     df = yf.download('MES=F', period='730d', interval='1h',
                      progress=False, auto_adjust=True)
