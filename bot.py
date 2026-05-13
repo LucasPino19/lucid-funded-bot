@@ -16,6 +16,7 @@ import yfinance as yf
 from config import (CUENTA, PLANES, TICKER, ESTADO_FILE, REPORTS_DIR,
                     MAX_CONSEC_PERDIDAS, CIERRE_HORA, CIERRE_MIN)
 from estrategias import signal_orb_entry, signal_ict_entry, gestionar_posicion
+from filtro_noticias import check_noticia
 
 # LIVE_MODE=true → ejecuta ordenes reales via Rithmic
 LIVE_MODE = os.environ.get('LIVE_MODE', 'false').lower() == 'true'
@@ -328,6 +329,12 @@ def main():
                 print('[%s] Posicion abierta — %s desde %.2f | SL %.2f | TP %.2f' % (
                     estrategia, pos['direccion'], pos['entrada'],
                     pos['sl'], pos['tp']))
+
+        # ── Filtro de noticias ──
+        hay_noticia, nombre_ev = check_noticia(hoy)
+        if hay_noticia:
+            print('[%s] Noticia alto impacto hoy (%s 8:30am ET) — sin operaciones.' % (estrategia, nombre_ev))
+            continue
 
         # ── Buscar entrada nueva ──
         elif c.get('ya_opero_hoy') != dia_str:
