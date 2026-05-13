@@ -19,6 +19,20 @@ ET = ZoneInfo("America/New_York")
 # UTILIDADES
 # ══════════════════════════════════════════════
 
+def calcular_ema_diaria(df, period=20):
+    """EMA(20) de cierres diarios. Devuelve (ema_ayer, close_ayer) sin lookahead."""
+    df_d = df[['Close']].resample('D').last().dropna()
+    if len(df_d) < period + 2:
+        return None, None
+    closes = df_d['Close'].values
+    k = 2 / (period + 1)
+    ema = np.zeros(len(closes))
+    ema[0] = closes[0]
+    for i in range(1, len(closes)):
+        ema[i] = closes[i] * k + ema[i-1] * (1 - k)
+    return float(ema[-2]), float(closes[-2])
+
+
 def calcular_vwap(df):
     tp = (df['High'] + df['Low'] + df['Close']) / 3
     df = df.copy()
@@ -78,8 +92,10 @@ def calcular_adx_ayer(df, period=14):
 
 def _simular_salida(direccion, indices_resto, highs, lows, closes, sl, tp, n_total):
     """Simula stop/target en el resto del día. Cierra antes de las 4:30pm."""
+    if not indices_resto:
+        return 'timeout', closes[n_total - 1]  # sin velas restantes: cierra al último close
     resultado     = 'timeout'
-    precio_salida = closes[min(indices_resto[-1] if indices_resto else 0, n_total - 1)]
+    precio_salida = closes[indices_resto[-1]]
 
     for m in indices_resto:
         if direccion == 'LONG':
@@ -261,6 +277,12 @@ def signal_ict(df_completo, fecha_hoy, capital, obs_usados):
     """
     max_c = PLANES[CUENTA]['max_contratos']
 
+    # Filtro EMA(20): solo LONG si precio > EMA, solo SHORT si precio < EMA
+    ema_ayer, close_ayer = calcular_ema_diaria(df_completo)
+    tendencia = None
+    if ema_ayer is not None:
+        tendencia = 'LONG' if close_ayer > ema_ayer else 'SHORT'
+
     vwap_vals = calcular_vwap(df_completo)
     closes    = df_completo['Close'].values
     highs     = df_completo['High'].values
@@ -288,6 +310,12 @@ def signal_ict(df_completo, fecha_hoy, capital, obs_usados):
             clave   = '%d_%s' % (idx, tipo)
 
             if clave in obs_usados or ob_size <= 0:
+                continue
+
+            # Filtro EMA: saltear OBs contra la tendencia diaria
+            if tendencia == 'LONG' and tipo == 'bear':
+                continue
+            if tendencia == 'SHORT' and tipo == 'bull':
                 continue
 
             for k, j in enumerate(indices_hoy):
@@ -324,6 +352,8 @@ def signal_ict(df_completo, fecha_hoy, capital, obs_usados):
                 contratos = min(max(1, int(riesgo_usd / riesgo_contrato)), max_c)
 
                 resto = indices_hoy[k+1:]
+                if not resto:
+                    continue  # sin tiempo restante para gestionar, skip
                 resultado, precio_salida = _simular_salida(
                     direccion, resto, highs, lows, closes, sl, tp, len(closes)
                 )
@@ -446,8 +476,15 @@ def signal_orb_entry(df_completo, fecha_hoy, capital, orb_sizes_hist):
 def signal_ict_entry(df_completo, fecha_hoy, capital, obs_usados):
     """
     Verifica si la última vela completa de hoy genera entrada ICT.
+    Filtro EMA(20): solo LONG si precio > EMA, solo SHORT si precio < EMA.
     """
     max_c = PLANES[CUENTA]['max_contratos']
+
+    # Filtro EMA diaria
+    ema_ayer, close_ayer = calcular_ema_diaria(df_completo)
+    tendencia = None
+    if ema_ayer is not None:
+        tendencia = 'LONG' if close_ayer > ema_ayer else 'SHORT'
 
     vwap_vals = calcular_vwap(df_completo)
     closes    = df_completo['Close'].values
@@ -478,6 +515,12 @@ def signal_ict_entry(df_completo, fecha_hoy, capital, obs_usados):
             clave   = '%d_%s' % (idx, tipo)
 
             if clave in obs_usados or ob_size <= 0 or j <= idx + 3:
+                continue
+
+            # Filtro EMA: saltear OBs contra la tendencia diaria
+            if tendencia == 'LONG' and tipo == 'bear':
+                continue
+            if tendencia == 'SHORT' and tipo == 'bull':
                 continue
 
             entrada = None
