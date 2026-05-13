@@ -8,7 +8,7 @@ import numpy as np
 from zoneinfo import ZoneInfo
 from config import (MULT, RIESGO_PCT, COSTO_CONTRATO, ADX_MIN,
                     ORB_STOP_MULT, ORB_TARGET_MULT, ORB_VOLT_FILTRO,
-                    ORB_VENTANA_H, ORB_VENTANA_M,
+                    ORB_HORA_INICIO, ORB_VENTANA_H, ORB_VENTANA_M,
                     ICT_IMPULSO, ICT_STOP_MULT, ICT_TARGET_MULT, ICT_LOOKBACK,
                     CIERRE_HORA, CIERRE_MIN, PLANES, CUENTA)
 
@@ -151,8 +151,11 @@ def signal_orb(df_completo, fecha_hoy, capital, orb_sizes_hist):
     if len(indices_hoy) < 3:
         return None, orb_sizes_hist, 'Pocos datos para hoy'
 
-    # Primera vela del día = rango ORB
-    i0       = indices_hoy[0]
+    # Primera vela de sesion regular (>= 9am ET) = rango ORB
+    i0 = next((i for i in indices_hoy
+               if fechas[i].astimezone(ET).hour >= ORB_HORA_INICIO), None)
+    if i0 is None:
+        return None, orb_sizes_hist, 'Sin vela de sesion regular'
     orb_high = highs[i0]
     orb_low  = lows[i0]
     orb_size = orb_high - orb_low
@@ -172,8 +175,9 @@ def signal_orb(df_completo, fecha_hoy, capital, orb_sizes_hist):
     stop_dist   = orb_size * ORB_STOP_MULT
     target_dist = orb_size * ORB_TARGET_MULT
 
-    # Buscar breakout en las siguientes velas (dentro de la ventana de 4h)
-    for k, i in enumerate(indices_hoy[1:], 1):
+    # Buscar breakout en las velas POSTERIORES a la vela ORB
+    indices_post_orb = [i for i in indices_hoy if i > i0]
+    for k, i in enumerate(indices_post_orb, 1):
         hora_et = fechas[i].astimezone(ET)
         if hora_et.hour > CIERRE_HORA or (hora_et.hour == CIERRE_HORA and hora_et.minute >= CIERRE_MIN):
             break
@@ -206,7 +210,7 @@ def signal_orb(df_completo, fecha_hoy, capital, orb_sizes_hist):
         contratos = min(max(1, int(riesgo_usd / riesgo_contrato)), max_c)
 
         # Simular el resto del día
-        resto = [j for j in indices_hoy[k+1:]
+        resto = [j for j in indices_post_orb[k:]
                  if not (fechas[j].astimezone(ET).hour > CIERRE_HORA or
                          (fechas[j].astimezone(ET).hour == CIERRE_HORA and
                           fechas[j].astimezone(ET).minute >= CIERRE_MIN))]
@@ -409,7 +413,10 @@ def signal_orb_entry(df_completo, fecha_hoy, capital, orb_sizes_hist):
     if len(indices_hoy) < 2:
         return None, orb_sizes_hist, 'Necesito >= 2 velas del dia'
 
-    i0       = indices_hoy[0]
+    i0 = next((i for i in indices_hoy
+               if fechas[i].astimezone(ET).hour >= ORB_HORA_INICIO), None)
+    if i0 is None:
+        return None, orb_sizes_hist, 'Sin vela de sesion regular aun'
     orb_high = highs[i0]
     orb_low  = lows[i0]
     orb_size = orb_high - orb_low
@@ -428,7 +435,10 @@ def signal_orb_entry(df_completo, fecha_hoy, capital, orb_sizes_hist):
     stop_dist   = orb_size * ORB_STOP_MULT
     target_dist = orb_size * ORB_TARGET_MULT
 
-    i       = indices_hoy[-1]
+    indices_post_orb = [i for i in indices_hoy if i > i0]
+    if not indices_post_orb:
+        return None, sizes_nuevos, 'Sin velas post-ORB aun'
+    i       = indices_post_orb[-1]
     hora_et = fechas[i].astimezone(ET)
 
     if hora_et.hour > ORB_VENTANA_H or (hora_et.hour == ORB_VENTANA_H and hora_et.minute >= ORB_VENTANA_M):
