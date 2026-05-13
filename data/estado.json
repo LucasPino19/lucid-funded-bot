@@ -11,7 +11,9 @@
     "razon_fin": "",
     "consecutivas_hoy": 0,
     "ultimo_dia": "",
-    "orb_sizes": [],
+    "orb_sizes": [
+      5.5
+    ],
     "obs_usados": []
   },
   "ICT": {
