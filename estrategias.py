@@ -641,3 +641,36 @@ def gestionar_posicion(posicion, df_completo, fecha_hoy):
         }
 
     return None
+
+
+def signal_actividad_minima(df_completo, fecha_hoy):
+    """
+    Genera una entrada mínima de 1 contrato para mantener la cuenta activa.
+    Solo se llama si pasaron >= 28 días sin ningún trade (caso extremo).
+    Saltea todos los filtros. Entra LONG al precio actual con SL/TP de 4 puntos.
+    """
+    fechas = df_completo.index
+    closes = df_completo['Close'].values
+
+    indices_hoy = [i for i, ts in enumerate(fechas)
+                   if ts.astimezone(ET).date() == fecha_hoy
+                   and ts.astimezone(ET).hour >= ORB_HORA_INICIO
+                   and not (ts.astimezone(ET).hour > CIERRE_HORA or
+                            (ts.astimezone(ET).hour == CIERRE_HORA and
+                             ts.astimezone(ET).minute >= CIERRE_MIN))]
+
+    if not indices_hoy:
+        return None
+
+    entrada = round(closes[indices_hoy[-1]], 2)
+    return {
+        'estrategia': 'ORB',
+        'direccion':  'LONG',
+        'entrada':    entrada,
+        'sl':         round(entrada - 4.0, 2),
+        'tp':         round(entrada + 4.0, 2),
+        'contratos':  1,
+        'orb_size':   0,
+        'adx':        0,
+        '_actividad': True,
+    }

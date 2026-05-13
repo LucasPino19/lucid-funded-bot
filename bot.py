@@ -15,7 +15,7 @@ import yfinance as yf
 
 from config import (CUENTA, PLANES, TICKER, ESTADO_FILE, REPORTS_DIR,
                     MAX_CONSEC_PERDIDAS, CIERRE_HORA, CIERRE_MIN)
-from estrategias import signal_orb_entry, signal_ict_entry, gestionar_posicion
+from estrategias import signal_orb_entry, signal_ict_entry, gestionar_posicion, signal_actividad_minima
 from filtro_noticias import check_noticia
 
 # LIVE_MODE=true → ejecuta ordenes reales via Rithmic
@@ -329,6 +329,28 @@ def main():
                 print('[%s] Posicion abierta — %s desde %.2f | SL %.2f | TP %.2f' % (
                     estrategia, pos['direccion'], pos['entrada'],
                     pos['sl'], pos['tp']))
+
+        # ── Actividad mínima: si pasaron >= 28 días sin trade ──
+        ultimo_trade = c.get('ultimo_dia', '')
+        dias_sin_trade = (hoy - __import__('datetime').date.fromisoformat(ultimo_trade)).days if ultimo_trade else 999
+        forzar_actividad = dias_sin_trade >= 28 and c.get('ya_opero_hoy') != dia_str
+
+        if forzar_actividad:
+            print('[%s] ACTIVIDAD FORZADA — %d dias sin trade — entrando con 1 contrato minimo.' % (estrategia, dias_sin_trade))
+            entry = signal_actividad_minima(df_hasta_ahora, hoy)
+            if entry:
+                if LIVE_MODE:
+                    order_id = submit_bracket_entry(entry)
+                    if order_id is None:
+                        print('[%s] Orden de actividad rechazada.' % estrategia)
+                    else:
+                        entry['order_id'] = order_id
+                        estado[estrategia]['posicion_abierta'] = entry
+                        estado[estrategia]['ya_opero_hoy']     = dia_str
+                else:
+                    estado[estrategia]['posicion_abierta'] = entry
+                    estado[estrategia]['ya_opero_hoy']     = dia_str
+            continue
 
         # ── Filtro de noticias ──
         hay_noticia, nombre_ev = check_noticia(hoy)
