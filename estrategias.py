@@ -68,7 +68,7 @@ def calcular_adx_ayer(df, period=14):
         if u > d and u > 0: dp[i] = u
         if d > u and d > 0: dn[i] = d
 
-    atr = sdp = sdn = np.zeros(n)
+    atr, sdp, sdn = np.zeros(n), np.zeros(n), np.zeros(n)
     atr[period] = tr[1:period+1].sum()
     sdp[period] = dp[1:period+1].sum()
     sdn[period] = dn[1:period+1].sum()
