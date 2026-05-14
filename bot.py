@@ -21,7 +21,12 @@ from filtro_noticias import check_noticia
 # LIVE_MODE=true → ejecuta ordenes reales via Rithmic
 LIVE_MODE = os.environ.get('LIVE_MODE', 'false').lower() == 'true'
 if LIVE_MODE:
-    from live_exec import submit_bracket_entry, get_open_position, flatten_position
+    try:
+        from live_exec import submit_bracket_entry, get_open_position, flatten_position
+    except Exception as _import_err:
+        print('[BOT] ERROR importando live_exec: %s' % _import_err)
+        print('[BOT] Continuando en modo simulacion.')
+        LIVE_MODE = False
 
 ET   = ZoneInfo("America/New_York")
 PLAN = PLANES[CUENTA]

@@ -12,7 +12,7 @@ import os
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-from async_rithmic import RithmicClient, Gateway, OrderType, OrderDuration, TransactionType
+from async_rithmic import RithmicClient, Gateway, OrderType, TransactionType
 
 from config import SYMBOL_LIVE, EXCHANGE_LIVE, RITHMIC_SYSTEM, TICK_SIZE
 
