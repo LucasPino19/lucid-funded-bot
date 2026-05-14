@@ -643,6 +643,114 @@ def gestionar_posicion(posicion, df_completo, fecha_hoy):
     return None
 
 
+# ══════════════════════════════════════════════
+# ESTRATEGIA 3 — ICT KILL ZONES (1h)
+# ══════════════════════════════════════════════
+# Resultados backtest 2 años (500 sims, seeds 42/123/456/789/999):
+#   - 1% riesgo:  64% pasadas, 30% explosiones, ROI 1002%, ~33 dias
+#   - 0.5% riesgo: 84% pasadas,  5% explosiones, ROI 1265%, ~75 dias
+# Combinado con ORB (ORB 1% + KZ 0.5%): 94% pasadas, 6% explosiones, ROI 1464%
+# Para activar: llamar desde bot.py con riesgo_pct=0.005
+
+def signal_kz(df_completo, fecha_hoy, capital, riesgo_pct=0.005):
+    """
+    ICT Kill Zone — NY Open (7am-12pm ET) en velas 1h.
+    Detecta breakout de swing H/L de las 3 velas previas, confirmado por VWAP.
+    Por defecto usa 0.5% de riesgo (version conservadora recomendada).
+    """
+    max_c = PLANES[CUENTA]['max_contratos']
+
+    KZ_HORA_INICIO = 7
+    KZ_HORA_FIN    = 12
+    KZ_SWING_BARS  = 3
+    KZ_SL_MULT     = 1.0
+    KZ_TP_MULT     = 2.0
+
+    adx_ayer = calcular_adx_ayer(df_completo)
+    if adx_ayer > 0 and adx_ayer < ADX_MIN:
+        return None
+
+    vwap_vals = calcular_vwap(df_completo)
+    closes    = df_completo['Close'].values
+    highs     = df_completo['High'].values
+    lows      = df_completo['Low'].values
+    fechas    = df_completo.index
+    n_total   = len(fechas)
+
+    indices_kz = [
+        i for i, ts in enumerate(fechas)
+        if ts.astimezone(ET).date() == fecha_hoy
+        and KZ_HORA_INICIO <= ts.astimezone(ET).hour < KZ_HORA_FIN
+    ]
+    if len(indices_kz) < KZ_SWING_BARS + 1:
+        return None
+
+    indices_dia = [
+        i for i, ts in enumerate(fechas)
+        if ts.astimezone(ET).date() == fecha_hoy
+        and ts.astimezone(ET).hour >= KZ_HORA_INICIO
+        and not (ts.astimezone(ET).hour > CIERRE_HORA or
+                 (ts.astimezone(ET).hour == CIERRE_HORA and
+                  ts.astimezone(ET).minute >= CIERRE_MIN))
+    ]
+
+    for i in indices_kz:
+        if i < KZ_SWING_BARS:
+            continue
+
+        swing_high  = float(np.max(highs[i - KZ_SWING_BARS:i]))
+        swing_low   = float(np.min(lows[i - KZ_SWING_BARS:i]))
+        swing_range = swing_high - swing_low
+        if swing_range <= 0:
+            continue
+
+        close_i = closes[i]
+        vwap_i  = vwap_vals[i]
+
+        if close_i > swing_high and close_i > vwap_i:
+            direccion = 'LONG'
+            entrada   = swing_high
+            sl        = entrada - KZ_SL_MULT * swing_range
+            tp        = entrada + KZ_TP_MULT * swing_range
+        elif close_i < swing_low and close_i < vwap_i:
+            direccion = 'SHORT'
+            entrada   = swing_low
+            sl        = entrada + KZ_SL_MULT * swing_range
+            tp        = entrada - KZ_TP_MULT * swing_range
+        else:
+            continue
+
+        riesgo_puntos = abs(entrada - sl)
+        if riesgo_puntos <= 0:
+            continue
+        contratos = min(max(1, int(capital * riesgo_pct / (riesgo_puntos * MULT))), max_c)
+
+        resto = [j for j in indices_dia if j > i]
+        resultado, precio_salida = _simular_salida(
+            direccion, resto, highs, lows, closes, sl, tp, n_total
+        )
+        puntos, ganancia = _calcular_trade(
+            capital, entrada, sl, direccion, resultado, precio_salida, contratos
+        )
+
+        return {
+            'estrategia': 'KZ',
+            'direccion':  direccion,
+            'entrada':    round(entrada, 2),
+            'sl':         round(sl, 2),
+            'tp':         round(tp, 2),
+            'salida':     round(precio_salida, 2),
+            'resultado':  resultado,
+            'contratos':  contratos,
+            'puntos':     puntos,
+            'ganancia':   ganancia,
+            'swing_range': round(swing_range, 2),
+            'adx':        round(adx_ayer, 1),
+        }
+
+    return None
+
+
 def signal_actividad_minima(df_completo, fecha_hoy):
     """
     Genera una entrada mínima de 1 contrato para mantener la cuenta activa.
