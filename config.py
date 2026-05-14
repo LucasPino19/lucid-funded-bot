@@ -56,7 +56,7 @@ MAX_CONSEC_PERDIDAS = 2 # circuit breaker: parar si 2 pérdidas seguidas en el d
 # Actualizar cada vez que ruede el contrato (Mar/Jun/Sep/Dec)
 SYMBOL_LIVE    = 'MESM6'      # Micro ES contrato activo en Rithmic (actualizar cada trimestre)
 EXCHANGE_LIVE  = 'CME'
-RITHMIC_SYSTEM = 'Lucid Trading'
+RITHMIC_SYSTEM = 'LucidTrading'
 TICK_SIZE      = 0.25         # 1 tick MES = $1.25
 
 # ── Paths ──

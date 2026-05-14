@@ -364,7 +364,8 @@ def main():
                 if LIVE_MODE:
                     order_id = submit_bracket_entry(entry)
                     if order_id is None:
-                        print('[%s] Orden de actividad rechazada.' % estrategia)
+                        print('[%s] Orden de actividad rechazada — no se reintenta hoy.' % estrategia)
+                        estado[estrategia]['ya_opero_hoy'] = dia_str
                     else:
                         entry['order_id'] = order_id
                         estado[estrategia]['posicion_abierta'] = entry
@@ -432,4 +433,17 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    import traceback
+    try:
+        main()
+    except Exception as e:
+        traceback.print_exc()
+        print('\n[BOT] Excepcion no manejada — guardando estado de emergencia.')
+        try:
+            from datetime import datetime
+            from zoneinfo import ZoneInfo
+            _et = ZoneInfo("America/New_York")
+            _estado = cargar_estado()
+            guardar_estado(_estado)
+        except Exception:
+            pass
