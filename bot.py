@@ -301,6 +301,17 @@ def main():
                     print('[%s] Error al cerrar huerfana en Rithmic: %s' % (est, _e))
             estado[est]['posicion_abierta'] = None
 
+    # Verificar posicion real en Rithmic aunque el estado local diga "sin posicion"
+    # Protege contra crash entre submit_order y guardar_estado (evita doble entrada)
+    if LIVE_MODE and not estado['ORB_LIVE'].get('posicion_abierta'):
+        try:
+            qty_real, dir_real = get_open_position()
+            if qty_real > 0:
+                print('[BOT] ALERTA: Rithmic tiene posicion abierta no registrada — bloqueando entradas hoy.')
+                estado['ORB_LIVE']['ya_opero_hoy'] = dia_str
+        except Exception as _e:
+            print('[BOT] No se pudo verificar posicion en Rithmic al inicio: %s' % _e)
+
     # Descargar datos hasta ahora (solo velas completas)
     # 60d: ADX(14) necesita 2*14+2=30 dias de trading; 30d da ~29, insuficiente
     print('Descargando %s (60d, 1h)...' % TICKER)
