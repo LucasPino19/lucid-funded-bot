@@ -8,7 +8,7 @@ Dos cuentas independientes: ORB+VWAP e ICT Order Blocks.
 
 import json
 import os
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
 import yfinance as yf
@@ -95,17 +95,17 @@ def aplicar_reglas(cuenta_estado, dia_str):
     trades         = cuenta_estado['trades']
 
     # Trailing drawdown EOD con ITB lock (regla real LucidFlex)
-    # Fase 1: MLL sube con el peak EOD (trailing activo)
-    # Fase 2: cuando capital supera ITB, MLL se congela en capital_inicial - mll_lock para siempre
+    # Fase 1: MLL sube con el peak EOD — peak se actualiza una vez por dia en el loop principal
+    # Fase 2: cuando peak >= capital_inicial + max_drawdown, MLL se congela en capital_inicial
+    # Ej. 25k: lock cuando peak >= $26,000 → MLL fijo en $25,000 para siempre
     capital_inicial = PLAN['capital_inicial']
-    itb             = capital_inicial + PLAN['profit_target']   # Initial Trail Balance
-    mll_fijo        = capital_inicial - PLAN['mll_lock']        # $24,900 para 25k
+    itb             = capital_inicial + PLAN['max_drawdown']   # $26,000 para 25k
+    mll_fijo        = capital_inicial                          # $25,000 para 25k
 
-    peak = max(cuenta_estado.get('peak_capital', capital_inicial), capital)
-    cuenta_estado['peak_capital'] = peak
+    peak = cuenta_estado.get('peak_capital', capital_inicial)  # actualizado EOD en bot.py
 
     if peak >= itb:
-        limite_drawdown = mll_fijo   # MLL congelado
+        limite_drawdown = mll_fijo   # MLL congelado en capital_inicial
     else:
         limite_drawdown = peak - PLAN['max_drawdown']   # MLL trailing
 
@@ -355,9 +355,11 @@ def main():
             print('[%s] %s' % (estrategia, c['razon_fin']))
             continue
 
-        # Resetear circuit breaker al inicio de cada nuevo dia
+        # Resetear circuit breaker y actualizar peak EOD al inicio de cada nuevo dia
         if c.get('ya_opero_hoy', '') < dia_str:
             c['consecutivas_hoy'] = 0
+            # Peak trail actualiza EOD: una vez por dia, con el balance de cierre del dia anterior
+            c['peak_capital'] = max(c.get('peak_capital', PLAN['capital_inicial']), c['capital'])
 
         # Circuit breaker — para si hubo 2 perdidas consecutivas HOY
         if c['consecutivas_hoy'] >= MAX_CONSEC_PERDIDAS:
@@ -400,7 +402,7 @@ def main():
 
         # ── Actividad mínima: si pasaron >= 28 días sin trade ──
         ultimo_trade = c.get('ultimo_dia', '')
-        dias_sin_trade = (hoy - __import__('datetime').date.fromisoformat(ultimo_trade)).days if ultimo_trade else 0
+        dias_sin_trade = (hoy - date.fromisoformat(ultimo_trade)).days if ultimo_trade else 0
         forzar_actividad = dias_sin_trade >= 28 and c.get('ya_opero_hoy') != dia_str
 
         if forzar_actividad:

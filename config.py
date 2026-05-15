@@ -10,7 +10,6 @@ PLANES = {
         'capital_inicial': 25_000,
         'profit_target':    1_250,   # +5% para pasar (LucidFlex 25K Flex Eval)
         'max_drawdown':     1_000,   # -4% → explota
-        'mll_lock':           100,   # MLL se congela en capital_inicial - 100 cuando supera ITB
         'max_contratos':       20,   # 20 MES (equivale a 2 ES mini)
         'fee_evaluacion':      75,   # precio sin descuento
     },
@@ -18,7 +17,6 @@ PLANES = {
         'capital_inicial': 50_000,
         'profit_target':    3_000,
         'max_drawdown':     2_000,
-        'mll_lock':           100,   # MLL se congela en capital_inicial - 100 cuando supera ITB
         'max_contratos':       40,   # 40 MES (equivale a 4 ES mini)
         'fee_evaluacion':     175,
     },
@@ -40,6 +38,12 @@ ORB_HORA_INICIO = 9     # primera vela de sesión regular (9am ET)
 ORB_VENTANA_H   = 13    # solo entrar antes de la 1:30pm ET
 ORB_VENTANA_M   = 30
 ADX_MIN         = 20    # mercado en tendencia si ADX > 20
+
+# ── ICT Kill Zones — VALIDADO PARA 50k, NO ACTIVAR EN 25k ──
+# Backtest (50 evals): 25k → 96% pasadas / 4% explosiones (peor que sin KZ)
+#                      50k → 100% pasadas / 0% exp / 34 dias prom (vs 39 sin KZ)
+# Para activar cuando se tenga cuenta 50k: llamar signal_kz() en bot.py con riesgo_pct=0.005
+# Ver memory/project_kz_50k.md para instrucciones de integración.
 
 # ── ICT Order Blocks ──
 ICT_IMPULSO     = 4     # velas consecutivas mínimas para OB válido
