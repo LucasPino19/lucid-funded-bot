@@ -13,8 +13,19 @@
     "ultimo_dia": "",
     "orb_sizes": [],
     "obs_usados": [],
-    "posicion_abierta": null,
-    "ya_opero_hoy": "2026-05-14"
+    "posicion_abierta": {
+      "estrategia": "ORB",
+      "direccion": "LONG",
+      "entrada": 7432.25,
+      "sl": 7428.25,
+      "tp": 7436.25,
+      "contratos": 1,
+      "orb_size": 0,
+      "adx": 0,
+      "_actividad": true,
+      "order_id": "LFB_ORB_100856"
+    },
+    "ya_opero_hoy": "2026-05-15"
   },
   "ORB_SIM": {
     "estrategia": "ORB_SIM",
