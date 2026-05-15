@@ -61,7 +61,16 @@ def cargar_estado():
     os.makedirs(os.path.dirname(ESTADO_FILE), exist_ok=True)
     if os.path.exists(ESTADO_FILE):
         with open(ESTADO_FILE) as f:
-            return json.load(f)
+            data = json.load(f)
+        # Completar campos faltantes — evita KeyError cuando se agregan campos nuevos al estado
+        for est in ('ORB_LIVE', 'ORB_SIM', 'ICT_SIM'):
+            if est not in data:
+                data[est] = estado_inicial(est)
+            else:
+                defaults = estado_inicial(est)
+                for key, val in defaults.items():
+                    data[est].setdefault(key, val)
+        return data
     return {
         'ORB_LIVE': estado_inicial('ORB_LIVE'),
         'ORB_SIM':  estado_inicial('ORB_SIM'),
@@ -282,6 +291,14 @@ def main():
         if (estado[est].get('posicion_abierta') and
                 estado[est].get('ya_opero_hoy', '') < dia_str):
             print('[%s] Posicion de dia anterior detectada — limpiando.' % est)
+            if LIVE_MODE and est == 'ORB_LIVE':
+                try:
+                    qty_real, dir_real = get_open_position()
+                    if qty_real > 0:
+                        print('[%s] Cerrando posicion real huerfana: %s x%d' % (est, dir_real, qty_real))
+                        flatten_position(qty_real, dir_real)
+                except Exception as _e:
+                    print('[%s] Error al cerrar huerfana en Rithmic: %s' % (est, _e))
             estado[est]['posicion_abierta'] = None
 
     # Descargar datos hasta ahora (solo velas completas)
@@ -291,6 +308,10 @@ def main():
     if hasattr(df.columns, 'levels'):
         df.columns = [c[0] if isinstance(c, tuple) else c for c in df.columns]
     df = df.dropna()
+    if df.empty:
+        print('Sin datos de yfinance — error de conexion o mercado cerrado.')
+        guardar_estado(estado)
+        return
 
     # Solo velas que cerraron hace al menos 30 min (velas completas)
     if df.index.tz is None:
@@ -339,7 +360,7 @@ def main():
 
         # ── Gestionar posicion abierta ──
         if c.get('posicion_abierta'):
-            trade_cerrado = gestionar_posicion(c['posicion_abierta'], df_hasta_ahora, hoy)
+            trade_cerrado = gestionar_posicion(c['posicion_abierta'], df_hasta_ahora, hoy, force_eod=es_eod)
             if trade_cerrado:
                 print('[%s] CERRADO: %s | %+.1f pts | $%+.0f' % (
                     estrategia, trade_cerrado['resultado'],
@@ -347,6 +368,7 @@ def main():
                 estado[estrategia] = procesar_trade(c, trade_cerrado, dia_str)
                 estado[estrategia]['posicion_abierta'] = None
                 trades_cerrados_hoy[estrategia] = trade_cerrado
+                continue  # buscar 2do trade en el proximo run (siguiente barra), no en esta misma vela
             else:
                 pos = c['posicion_abierta']
                 print('[%s] Posicion abierta — %s desde %.2f | SL %.2f | TP %.2f' % (
@@ -362,7 +384,7 @@ def main():
 
         # ── Actividad mínima: si pasaron >= 28 días sin trade ──
         ultimo_trade = c.get('ultimo_dia', '')
-        dias_sin_trade = (hoy - __import__('datetime').date.fromisoformat(ultimo_trade)).days if ultimo_trade else 999
+        dias_sin_trade = (hoy - __import__('datetime').date.fromisoformat(ultimo_trade)).days if ultimo_trade else 0
         forzar_actividad = dias_sin_trade >= 28 and c.get('ya_opero_hoy') != dia_str
 
         if forzar_actividad:
@@ -386,12 +408,19 @@ def main():
                     estado[estrategia]['ultimo_dia']        = dia_str
             continue
 
-        # ── Buscar entrada nueva ──
-        if c.get('ya_opero_hoy') != dia_str:
+        # ── Buscar entrada nueva (hasta 2 trades/día si el 1ro ya cerró) ──
+        trades_hoy      = sum(1 for t in c['trades'] if t['dia'] == dia_str)
+        puede_entrar    = (c.get('ya_opero_hoy') != dia_str or
+                           (trades_hoy == 1 and c.get('posicion_abierta') is None))
+
+        if puede_entrar:
             if estrategia in ('ORB_LIVE', 'ORB_SIM'):
                 entry, orb_sizes_nuevos, motivo = signal_orb_entry(
                     df_hasta_ahora, hoy, c['capital'], c['orb_sizes'])
-                estado[estrategia]['orb_sizes'] = orb_sizes_nuevos[-20:]
+                # Solo actualizar orb_sizes una vez por dia — evita duplicados por multiples runs
+                if c.get('orb_size_dia') != dia_str:
+                    estado[estrategia]['orb_sizes']   = orb_sizes_nuevos[-20:]
+                    estado[estrategia]['orb_size_dia'] = dia_str
                 if entry:
                     if LIVE_MODE:
                         order_id = submit_bracket_entry(entry)
@@ -402,8 +431,8 @@ def main():
                     estado[estrategia]['posicion_abierta'] = entry
                     estado[estrategia]['ya_opero_hoy']     = dia_str
                     estado[estrategia]['ultimo_dia']        = dia_str
-                    print('[ORB] ENTRADA: %s | %.2f | SL %.2f | TP %.2f | %d contratos' % (
-                        entry['direccion'], entry['entrada'],
+                    print('[ORB] ENTRADA #%d: %s | %.2f | SL %.2f | TP %.2f | %d contratos' % (
+                        trades_hoy + 1, entry['direccion'], entry['entrada'],
                         entry['sl'], entry['tp'], entry['contratos']))
                 else:
                     print('[ORB] Sin senal — %s' % (motivo or 'sin setup'))
@@ -416,6 +445,7 @@ def main():
                 if entry:
                     estado[estrategia]['posicion_abierta'] = entry
                     estado[estrategia]['ya_opero_hoy']     = dia_str
+                    estado[estrategia]['ultimo_dia']        = dia_str
                     print('[ICT] ENTRADA: %s | %.2f | SL %.2f | TP %.2f | %d contratos' % (
                         entry['direccion'], entry['entrada'],
                         entry['sl'], entry['tp'], entry['contratos']))
@@ -423,7 +453,10 @@ def main():
                     print('[ICT] Sin senal — %s' % (motivo or 'sin setup'))
 
         else:
-            print('[%s] Ya opero hoy — esperando manana.' % estrategia)
+            if trades_hoy >= 2:
+                print('[%s] 2 trades hoy — esperando manana.' % estrategia)
+            else:
+                print('[%s] Ya opero hoy — esperando manana.' % estrategia)
 
     guardar_estado(estado)
     generar_reporte(estado, dia_str, trades_cerrados_hoy)

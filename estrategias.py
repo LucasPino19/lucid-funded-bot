@@ -41,7 +41,8 @@ def calcular_vwap(df):
     df['_date']  = df.index.normalize()
     df['_ctpv']  = df.groupby('_date')['_tpv'].cumsum()
     df['_cvol']  = df.groupby('_date')['Volume'].cumsum()
-    return (df['_ctpv'] / df['_cvol']).values
+    vwap = df['_ctpv'] / df['_cvol'].replace(0, float('nan'))
+    return vwap.ffill().values
 
 
 def calcular_adx_ayer(df, period=14):
@@ -473,14 +474,15 @@ def signal_orb_entry(df_completo, fecha_hoy, capital, orb_sizes_hist):
     contratos = min(max(1, int(riesgo_usd / riesgo_contrato)), max_c)
 
     return {
-        'estrategia': 'ORB',
-        'direccion':  direccion,
-        'entrada':    round(entrada, 2),
-        'sl':         round(sl, 2),
-        'tp':         round(tp, 2),
-        'contratos':  contratos,
-        'orb_size':   round(orb_size, 2),
-        'adx':        round(adx_ayer, 1),
+        'estrategia':  'ORB',
+        'direccion':   direccion,
+        'entrada':     round(entrada, 2),
+        'sl':          round(sl, 2),
+        'tp':          round(tp, 2),
+        'contratos':   contratos,
+        'orb_size':    round(orb_size, 2),
+        'adx':         round(adx_ayer, 1),
+        'hora_entrada': hora_et.hour,
     }, sizes_nuevos, None
 
 
@@ -564,24 +566,26 @@ def signal_ict_entry(df_completo, fecha_hoy, capital, obs_usados):
 
             obs_usados_nuevos = obs_usados | {clave}
             return {
-                'estrategia': 'ICT',
-                'ob_clave':   clave,
-                'tipo_ob':    tipo,
-                'direccion':  direccion,
-                'entrada':    round(entrada, 2),
-                'sl':         round(sl, 2),
-                'tp':         round(tp, 2),
-                'contratos':  contratos,
-                'ob_size':    round(ob_size, 2),
+                'estrategia':  'ICT',
+                'ob_clave':    clave,
+                'tipo_ob':     tipo,
+                'direccion':   direccion,
+                'entrada':     round(entrada, 2),
+                'sl':          round(sl, 2),
+                'tp':          round(tp, 2),
+                'contratos':   contratos,
+                'ob_size':     round(ob_size, 2),
+                'hora_entrada': fechas[j].astimezone(ET).hour,
             }, obs_usados_nuevos, None
 
     return None, obs_usados, 'Sin OB tocado en ultima vela'
 
 
-def gestionar_posicion(posicion, df_completo, fecha_hoy):
+def gestionar_posicion(posicion, df_completo, fecha_hoy, force_eod=False):
     """
     Revisa todas las velas de hoy en orden para ver si la posición abierta
     tocó stop o target. Devuelve el trade cerrado o None si sigue abierto.
+    force_eod=True: si ninguna vela dispara cierre, fuerza timeout al último close disponible.
     """
     fechas = df_completo.index
     highs  = df_completo['High'].values
@@ -600,8 +604,12 @@ def gestionar_posicion(posicion, df_completo, fecha_hoy):
     if not indices_hoy:
         return None
 
+    hora_entrada = posicion.get('hora_entrada')
+
     for i in indices_hoy:
         hora_et     = fechas[i].astimezone(ET)
+        if hora_entrada is not None and hora_et.hour < hora_entrada:
+            continue
         force_close = (hora_et.hour > CIERRE_HORA or
                        (hora_et.hour == CIERRE_HORA and hora_et.minute >= CIERRE_MIN))
 
@@ -637,6 +645,20 @@ def gestionar_posicion(posicion, df_completo, fecha_hoy):
             **posicion,
             'salida':    round(precio_salida, 2),
             'resultado': resultado,
+            'puntos':    puntos,
+            'ganancia':  ganancia,
+        }
+
+    # EOD run: barra de 4:30pm puede no estar en yfinance aún — forzar timeout con último close
+    if force_eod and indices_hoy:
+        precio_salida = closes[indices_hoy[-1]]
+        puntos, ganancia = _calcular_trade(
+            None, entrada, sl, direccion, 'timeout', precio_salida, contratos
+        )
+        return {
+            **posicion,
+            'salida':    round(precio_salida, 2),
+            'resultado': 'timeout',
             'puntos':    puntos,
             'ganancia':  ganancia,
         }
@@ -771,15 +793,17 @@ def signal_actividad_minima(df_completo, fecha_hoy):
     if not indices_hoy:
         return None
 
-    entrada = round(closes[indices_hoy[-1]], 2)
+    i_last  = indices_hoy[-1]
+    entrada = round(closes[i_last], 2)
     return {
-        'estrategia': 'ORB',
-        'direccion':  'LONG',
-        'entrada':    entrada,
-        'sl':         round(entrada - 4.0, 2),
-        'tp':         round(entrada + 4.0, 2),
-        'contratos':  1,
-        'orb_size':   0,
-        'adx':        0,
-        '_actividad': True,
+        'estrategia':   'ORB',
+        'direccion':    'LONG',
+        'entrada':      entrada,
+        'sl':           round(entrada - 4.0, 2),
+        'tp':           round(entrada + 4.0, 2),
+        'contratos':    1,
+        'orb_size':     0,
+        'adx':          0,
+        '_actividad':   True,
+        'hora_entrada': fechas[i_last].astimezone(ET).hour,
     }

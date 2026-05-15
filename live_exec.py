@@ -74,8 +74,11 @@ async def _submit_bracket_async(entry_signal):
         target_ticks=target_ticks,
     )
 
-    await client.disconnect()
     print('[LIVE] Orden enviada: %s' % str(result))
+    try:
+        await client.disconnect()
+    except Exception:
+        pass  # orden ya enviada — ignorar error de disconnect
     return order_id
 
 
@@ -85,8 +88,10 @@ async def _get_position_async():
     await client.connect()
 
     positions = await client.list_positions()
-    await client.disconnect()
-
+    try:
+        await client.disconnect()
+    except Exception:
+        pass
     for pos in positions:
         sym = getattr(pos, 'symbol', '')
         if sym != SYMBOL_LIVE:
@@ -121,7 +126,11 @@ async def _flatten_async(qty, direccion):
         order_type=OrderType.MARKET,
     )
 
-    await client.disconnect()
+    print('[LIVE] Cierre enviado: %s' % order_id)
+    try:
+        await client.disconnect()
+    except Exception:
+        pass  # cierre ya enviado — ignorar error de disconnect
 
 
 # ──────────────────────────────────────────────
