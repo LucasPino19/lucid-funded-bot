@@ -1,11 +1,8 @@
 name: LucidFlex Bot Intraday
 
 on:
-  schedule:
-    # Corre cada hora de 10:35am a 4:35pm ET (lunes a viernes)
-    # ET = UTC-4 (EDT) — 10:35am ET = 14:35 UTC
-    - cron: '35 14-20 * * 1-5'
   workflow_dispatch:
+    # Disparado por cron-job.org via GitHub API (mas confiable que GitHub cron)
 
 concurrency:
   group: lucid-bot
