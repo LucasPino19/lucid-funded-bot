@@ -392,10 +392,11 @@ def signal_ict(df_completo, fecha_hoy, capital, obs_usados):
 # MODO INTRADAY — entry en tiempo real
 # ══════════════════════════════════════════════
 
-def signal_orb_entry(df_completo, fecha_hoy, capital, orb_sizes_hist):
+def signal_orb_entry(df_completo, fecha_hoy, capital, orb_sizes_hist, force_contrato=False):
     """
     Verifica si la última vela completa de hoy genera entrada ORB.
     Solo mira la vela más reciente (no simula el día entero).
+    force_contrato=True: usa 1 contrato aunque el riesgo supere el 1% (para 2do trade).
     """
     max_c = PLANES[CUENTA]['max_contratos']
 
@@ -469,9 +470,14 @@ def signal_orb_entry(df_completo, fecha_hoy, capital, orb_sizes_hist):
     riesgo_usd      = capital * RIESGO_PCT
     riesgo_puntos   = abs(entrada - sl)
     riesgo_contrato = riesgo_puntos * MULT
-    if riesgo_contrato == 0 or riesgo_contrato > riesgo_usd:
+    if riesgo_contrato == 0:
         return None, sizes_nuevos, 'Riesgo fuera de rango'
-    contratos = min(max(1, int(riesgo_usd / riesgo_contrato)), max_c)
+    if riesgo_contrato > riesgo_usd:
+        if not force_contrato:
+            return None, sizes_nuevos, 'Riesgo fuera de rango (ORB grande)'
+        contratos = 1
+    else:
+        contratos = min(max(1, int(riesgo_usd / riesgo_contrato)), max_c)
 
     return {
         'estrategia':  'ORB',

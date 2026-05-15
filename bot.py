@@ -420,8 +420,10 @@ def main():
 
         if puede_entrar:
             if estrategia in ('ORB_LIVE', 'ORB_SIM'):
+                es_segundo = (trades_hoy == 1)
                 entry, orb_sizes_nuevos, motivo = signal_orb_entry(
-                    df_hasta_ahora, hoy, c['capital'], c['orb_sizes'])
+                    df_hasta_ahora, hoy, c['capital'], c['orb_sizes'],
+                    force_contrato=es_segundo)
                 # Solo actualizar orb_sizes una vez por dia — evita duplicados por multiples runs
                 if c.get('orb_size_dia') != dia_str:
                     estado[estrategia]['orb_sizes']   = orb_sizes_nuevos[-20:]
