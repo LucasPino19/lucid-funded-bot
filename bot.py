@@ -132,10 +132,7 @@ def procesar_trade(cuenta_estado, trade, dia_str):
     cuenta_estado['ganancia_por_dia'][dia_str] = round(prev + ganancia, 2)
 
     if trade['resultado'] == 'stop_loss':
-        if cuenta_estado['ultimo_dia'] == dia_str:
-            cuenta_estado['consecutivas_hoy'] += 1
-        else:
-            cuenta_estado['consecutivas_hoy'] = 1
+        cuenta_estado['consecutivas_hoy'] += 1
     else:
         cuenta_estado['consecutivas_hoy'] = 0
 
@@ -325,10 +322,9 @@ def main():
             print('[%s] %s' % (estrategia, c['razon_fin']))
             continue
 
-        # Circuit breaker
-        if (c['ultimo_dia'] == dia_str and
-                c['consecutivas_hoy'] >= MAX_CONSEC_PERDIDAS):
-            print('[%s] Circuit breaker — %d perdidas hoy.' % (estrategia, MAX_CONSEC_PERDIDAS))
+        # Circuit breaker — para si hubo N perdidas consecutivas (en dias distintos)
+        if c['consecutivas_hoy'] >= MAX_CONSEC_PERDIDAS:
+            print('[%s] Circuit breaker — %d perdidas consecutivas.' % (estrategia, MAX_CONSEC_PERDIDAS))
             continue
 
         # ── EOD: cerrar posicion real si es tarde ──
