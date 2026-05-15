@@ -344,9 +344,13 @@ def main():
             print('[%s] %s' % (estrategia, c['razon_fin']))
             continue
 
-        # Circuit breaker — para si hubo N perdidas consecutivas (en dias distintos)
+        # Resetear circuit breaker al inicio de cada nuevo dia
+        if c.get('ya_opero_hoy', '') < dia_str:
+            c['consecutivas_hoy'] = 0
+
+        # Circuit breaker — para si hubo 2 perdidas consecutivas HOY
         if c['consecutivas_hoy'] >= MAX_CONSEC_PERDIDAS:
-            print('[%s] Circuit breaker — %d perdidas consecutivas.' % (estrategia, MAX_CONSEC_PERDIDAS))
+            print('[%s] Circuit breaker — %d perdidas consecutivas hoy.' % (estrategia, MAX_CONSEC_PERDIDAS))
             continue
 
         # ── EOD: cerrar posicion real si es tarde ──
