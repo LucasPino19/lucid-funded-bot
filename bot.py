@@ -302,8 +302,9 @@ def main():
             estado[est]['posicion_abierta'] = None
 
     # Descargar datos hasta ahora (solo velas completas)
-    print('Descargando %s (30d, 1h)...' % TICKER)
-    df = yf.download(TICKER, period='30d', interval='1h',
+    # 60d: ADX(14) necesita 2*14+2=30 dias de trading; 30d da ~29, insuficiente
+    print('Descargando %s (60d, 1h)...' % TICKER)
+    df = yf.download(TICKER, period='60d', interval='1h',
                      auto_adjust=True, progress=False)
     if hasattr(df.columns, 'levels'):
         df.columns = [c[0] if isinstance(c, tuple) else c for c in df.columns]
