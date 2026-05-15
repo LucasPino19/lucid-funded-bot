@@ -3,30 +3,32 @@
     "estrategia": "ORB_LIVE",
     "cuenta": "25k",
     "capital_inicial": 25000,
-    "capital": 25000,
-    "ganancia_total": 0.0,
-    "ganancia_por_dia": {},
-    "trades": [],
+    "capital": 24976.0,
+    "ganancia_total": -24.0,
+    "ganancia_por_dia": {
+      "2026-05-15": -24.0
+    },
+    "trades": [
+      {
+        "dia": "2026-05-15",
+        "estrategia": "ORB",
+        "direccion": "LONG",
+        "resultado": "stop_loss",
+        "puntos": -4.0,
+        "contratos": 1,
+        "ganancia": -24.0,
+        "capital": 24976.0
+      }
+    ],
     "estado": "activa",
     "razon_fin": "",
-    "consecutivas_hoy": 0,
+    "consecutivas_hoy": 1,
     "ultimo_dia": "2026-05-15",
     "orb_sizes": [],
     "obs_usados": [],
-    "posicion_abierta": {
-      "estrategia": "ORB",
-      "direccion": "LONG",
-      "entrada": 7432.25,
-      "sl": 7428.25,
-      "tp": 7436.25,
-      "contratos": 1,
-      "orb_size": 0,
-      "adx": 0,
-      "_actividad": true,
-      "hora_entrada": 9,
-      "order_id": "LFB_ORB_100856"
-    },
-    "ya_opero_hoy": "2026-05-15"
+    "posicion_abierta": null,
+    "ya_opero_hoy": "2026-05-15",
+    "peak_capital": 25000
   },
   "ORB_SIM": {
     "estrategia": "ORB_SIM",
@@ -43,7 +45,8 @@
     "orb_sizes": [],
     "obs_usados": [],
     "posicion_abierta": null,
-    "ya_opero_hoy": ""
+    "ya_opero_hoy": "",
+    "peak_capital": 25000
   },
   "ICT_SIM": {
     "estrategia": "ICT_SIM",
@@ -60,6 +63,7 @@
     "orb_sizes": [],
     "obs_usados": [],
     "posicion_abierta": null,
-    "ya_opero_hoy": ""
+    "ya_opero_hoy": "",
+    "peak_capital": 25000
   }
 }
