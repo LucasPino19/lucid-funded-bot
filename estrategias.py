@@ -221,18 +221,19 @@ def signal_orb(df_completo, fecha_hoy, capital, orb_sizes_hist):
         puntos, ganancia = _calcular_trade(capital, entrada, sl, direccion, resultado, precio_salida, contratos)
 
         return {
-            'estrategia': 'ORB',
-            'direccion':  direccion,
-            'entrada':    round(entrada, 2),
-            'sl':         round(sl, 2),
-            'tp':         round(tp, 2),
-            'salida':     round(precio_salida, 2),
-            'resultado':  resultado,
-            'contratos':  contratos,
-            'puntos':     puntos,
-            'ganancia':   ganancia,
-            'orb_size':   round(orb_size, 2),
-            'adx':        round(adx_ayer, 1),
+            'estrategia':  'ORB',
+            'direccion':   direccion,
+            'entrada':     round(entrada, 2),
+            'sl':          round(sl, 2),
+            'tp':          round(tp, 2),
+            'salida':      round(precio_salida, 2),
+            'resultado':   resultado,
+            'contratos':   contratos,
+            'puntos':      puntos,
+            'ganancia':    ganancia,
+            'orb_size':    round(orb_size, 2),
+            'adx':         round(adx_ayer, 1),
+            'hora_entrada': fechas[i].astimezone(ET).hour,
         }, sizes_nuevos, None
 
     return None, sizes_nuevos, 'Sin señal ORB hoy'

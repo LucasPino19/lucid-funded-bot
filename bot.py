@@ -291,7 +291,7 @@ def main():
     print('Descargando %s (30d, 1h)...' % TICKER)
     df = yf.download(TICKER, period='30d', interval='1h',
                      auto_adjust=True, progress=False)
-    if isinstance(df.columns, type(df.columns)) and hasattr(df.columns, 'levels'):
+    if hasattr(df.columns, 'levels'):
         df.columns = [c[0] if isinstance(c, tuple) else c for c in df.columns]
     df = df.dropna()
 
@@ -357,6 +357,12 @@ def main():
                     estrategia, pos['direccion'], pos['entrada'],
                     pos['sl'], pos['tp']))
 
+        # ── Filtro de noticias (se chequea antes de cualquier entrada, incluso actividad forzada) ──
+        hay_noticia, nombre_ev = check_noticia(hoy)
+        if hay_noticia:
+            print('[%s] Noticia alto impacto hoy (%s) — sin operaciones.' % (estrategia, nombre_ev))
+            continue
+
         # ── Actividad mínima: si pasaron >= 28 días sin trade ──
         ultimo_trade = c.get('ultimo_dia', '')
         dias_sin_trade = (hoy - __import__('datetime').date.fromisoformat(ultimo_trade)).days if ultimo_trade else 999
@@ -380,14 +386,8 @@ def main():
                     estado[estrategia]['ya_opero_hoy']     = dia_str
             continue
 
-        # ── Filtro de noticias ──
-        hay_noticia, nombre_ev = check_noticia(hoy)
-        if hay_noticia:
-            print('[%s] Noticia alto impacto hoy (%s 8:30am ET) — sin operaciones.' % (estrategia, nombre_ev))
-            continue
-
         # ── Buscar entrada nueva ──
-        elif c.get('ya_opero_hoy') != dia_str:
+        if c.get('ya_opero_hoy') != dia_str:
             if estrategia in ('ORB_LIVE', 'ORB_SIM'):
                 entry, orb_sizes_nuevos, motivo = signal_orb_entry(
                     df_hasta_ahora, hoy, c['capital'], c['orb_sizes'])
