@@ -352,6 +352,7 @@ def main():
                 print('[%s] Posicion abierta — %s desde %.2f | SL %.2f | TP %.2f' % (
                     estrategia, pos['direccion'], pos['entrada'],
                     pos['sl'], pos['tp']))
+                continue  # posicion todavia abierta — no buscar nueva entrada
 
         # ── Filtro de noticias (se chequea antes de cualquier entrada, incluso actividad forzada) ──
         hay_noticia, nombre_ev = check_noticia(hoy)
@@ -400,6 +401,7 @@ def main():
                         entry['order_id'] = order_id
                     estado[estrategia]['posicion_abierta'] = entry
                     estado[estrategia]['ya_opero_hoy']     = dia_str
+                    estado[estrategia]['ultimo_dia']        = dia_str
                     print('[ORB] ENTRADA: %s | %.2f | SL %.2f | TP %.2f | %d contratos' % (
                         entry['direccion'], entry['entrada'],
                         entry['sl'], entry['tp'], entry['contratos']))
