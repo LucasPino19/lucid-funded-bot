@@ -24,11 +24,14 @@
     "razon_fin": "",
     "consecutivas_hoy": 0,
     "ultimo_dia": "2026-05-15",
-    "orb_sizes": [],
+    "orb_sizes": [
+      40.75
+    ],
     "obs_usados": [],
     "posicion_abierta": null,
     "ya_opero_hoy": "2026-05-15",
-    "peak_capital": 25016.0
+    "peak_capital": 25016.0,
+    "orb_size_dia": "2026-05-15"
   },
   "ORB_SIM": {
     "estrategia": "ORB_SIM",
