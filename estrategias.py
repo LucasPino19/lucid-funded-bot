@@ -608,7 +608,7 @@ def gestionar_posicion(posicion, df_completo, fecha_hoy, force_eod=False):
 
     for i in indices_hoy:
         hora_et     = fechas[i].astimezone(ET)
-        if hora_entrada is not None and hora_et.hour < hora_entrada:
+        if hora_entrada is not None and hora_et.hour <= hora_entrada:
             continue
         force_close = (hora_et.hour > CIERRE_HORA or
                        (hora_et.hour == CIERRE_HORA and hora_et.minute >= CIERRE_MIN))
