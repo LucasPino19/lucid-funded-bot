@@ -373,13 +373,16 @@ def main():
                     if order_id is None:
                         print('[%s] Orden de actividad rechazada — no se reintenta hoy.' % estrategia)
                         estado[estrategia]['ya_opero_hoy'] = dia_str
+                        estado[estrategia]['ultimo_dia']   = dia_str
                     else:
                         entry['order_id'] = order_id
                         estado[estrategia]['posicion_abierta'] = entry
                         estado[estrategia]['ya_opero_hoy']     = dia_str
+                        estado[estrategia]['ultimo_dia']        = dia_str
                 else:
                     estado[estrategia]['posicion_abierta'] = entry
                     estado[estrategia]['ya_opero_hoy']     = dia_str
+                    estado[estrategia]['ultimo_dia']        = dia_str
             continue
 
         # ── Buscar entrada nueva ──
