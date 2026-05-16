@@ -12,7 +12,22 @@ from config import (MULT, RIESGO_PCT, COSTO_CONTRATO, ADX_MIN,
                     ORB_STOP_MULT, ORB_TARGET_MULT, ORB_VOLT_FILTRO,
                     ORB_HORA_INICIO, ORB_MIN_INICIO, ORB_VENTANA_H, ORB_VENTANA_M,
                     ICT_IMPULSO, ICT_STOP_MULT, ICT_TARGET_MULT, ICT_LOOKBACK,
-                    CIERRE_HORA, CIERRE_MIN, PLANES, CUENTA)
+                    CIERRE_HORA, CIERRE_MIN, PLANES, CUENTA, GLOBEX_ALIGNED)
+
+
+def _resample_daily(df_sub):
+    """Resample a buckets diarios respetando GLOBEX_ALIGNED.
+
+    GLOBEX_ALIGNED=False -> resample('D') con índice ET => buckets 00:00->00:00 ET.
+    GLOBEX_ALIGNED=True  -> shift -18h y resample('D') => buckets que representan
+        la sesión CME completa (18:00 ET inicio -> 17:00 ET settlement del día siguiente).
+        El bucket queda etiquetado con la fecha de APERTURA de la sesión.
+    """
+    if not GLOBEX_ALIGNED:
+        return df_sub.resample('D')
+    df_s = df_sub.copy()
+    df_s.index = df_s.index - pd.Timedelta(hours=18)
+    return df_s.resample('D')
 
 ET = ZoneInfo("America/New_York")
 
@@ -23,7 +38,7 @@ ET = ZoneInfo("America/New_York")
 
 def calcular_ema_diaria(df, period=20):
     """EMA(20) de cierres diarios. Devuelve (ema_ayer, close_ayer) sin lookahead."""
-    df_d = df[['Close']].resample('D').last().dropna()
+    df_d = _resample_daily(df[['Close']]).last().dropna()
     if len(df_d) < period + 2:
         return None, None
     closes = df_d['Close'].values
@@ -58,7 +73,7 @@ def calcular_vwap(df):
 
 def calcular_adx_ayer(df, period=14):
     """ADX del día anterior al último día en df. Sin look-ahead."""
-    df_d = df[['Open', 'High', 'Low', 'Close']].resample('D').agg(
+    df_d = _resample_daily(df[['Open', 'High', 'Low', 'Close']]).agg(
         {'Open': 'first', 'High': 'max', 'Low': 'min', 'Close': 'last'}
     ).dropna()
 

@@ -40,6 +40,14 @@ ORB_VENTANA_H   = 15    # solo entrar antes de las 3:00pm ET (variante B — bac
 ORB_VENTANA_M   = 0
 ADX_MIN         = 20    # mercado en tendencia si ADX > 20
 
+# ── Alineación de buckets diarios (EMA/ADX) ──
+# False (default): buckets 00:00 -> 00:00 ET — comportamiento histórico.
+# True: buckets 18:00 ET -> 17:00 ET — alineado a la sesión CME (globex open
+# -> daily settlement). Más correcto, pero hay que validar con backtest antes
+# de flippear el default. Override via env var: GLOBEX_ALIGNED=1
+import os as _os
+GLOBEX_ALIGNED = _os.environ.get('GLOBEX_ALIGNED', '0') == '1'
+
 # ── ICT Kill Zones — VALIDADO PARA 50k, NO ACTIVAR EN 25k ──
 # Backtest (50 evals): 25k → 96% pasadas / 4% explosiones (peor que sin KZ)
 #                      50k → 100% pasadas / 0% exp / 34 dias prom (vs 39 sin KZ)
