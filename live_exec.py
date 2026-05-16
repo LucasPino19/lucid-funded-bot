@@ -9,10 +9,11 @@ Variables de entorno requeridas:
 
 import asyncio
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
-from async_rithmic import RithmicClient, Gateway, OrderType, TransactionType
+import pandas as pd
+from async_rithmic import RithmicClient, Gateway, OrderType, TimeBarType, TransactionType
 
 from config import SYMBOL_LIVE, EXCHANGE_LIVE, RITHMIC_SYSTEM, TICK_SIZE
 
@@ -182,6 +183,72 @@ async def _flatten_async(qty, direccion):
             await client.disconnect()
         except Exception:
             pass
+
+
+# ──────────────────────────────────────────────
+# Barras historicas 1h
+# ──────────────────────────────────────────────
+
+async def _fetch_bars_async(num_trading_days):
+    from datetime import timezone
+    client = _make_client()
+    await client.connect()
+
+    end_time   = datetime.now(timezone.utc)
+    start_time = end_time - timedelta(days=num_trading_days)
+
+    bars = await client.get_historical_time_bars(
+        symbol=SYMBOL_LIVE,
+        exchange=EXCHANGE_LIVE,
+        start_time=start_time,
+        end_time=end_time,
+        bar_type=TimeBarType.MINUTE_BAR,
+        bar_type_periods=60,
+    )
+    try:
+        await client.disconnect()
+    except Exception:
+        pass
+    return bars
+
+
+def fetch_historical_bars(num_trading_days=60):
+    """Descarga velas 1h de Rithmic. Devuelve DataFrame OHLCV con DatetimeIndex ET, o None si falla."""
+    try:
+        bars = asyncio.run(_fetch_bars_async(num_trading_days))
+    except Exception as e:
+        print('[LIVE] ERROR al descargar barras historicas: %s' % e)
+        return None
+
+    if not bars:
+        print('[LIVE] Rithmic devolvio 0 barras.')
+        return None
+
+    rows = []
+    for bar in bars:
+        marker = bar.get('marker')
+        if not marker:
+            continue
+        ts = datetime.fromtimestamp(marker, tz=ET)
+        rows.append({
+            'datetime': ts,
+            'Open':   float(bar.get('open_price',  0) or 0),
+            'High':   float(bar.get('high_price',  0) or 0),
+            'Low':    float(bar.get('low_price',   0) or 0),
+            'Close':  float(bar.get('close_price', 0) or 0),
+            'Volume': int(bar.get('volume',        0) or 0),
+        })
+
+    if not rows:
+        return None
+
+    df = pd.DataFrame(rows).set_index('datetime')
+    df = df[~df.index.duplicated(keep='last')].sort_index()
+    df = df[df['Close'] > 0]
+    # Rithmic etiqueta cada barra con su END time; yfinance usa START time.
+    # estrategias.py espera start-time → restamos la duracion de la barra (1h).
+    df.index = df.index - pd.Timedelta(hours=1)
+    return df
 
 
 # ──────────────────────────────────────────────

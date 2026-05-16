@@ -13,7 +13,7 @@ from zoneinfo import ZoneInfo
 
 import yfinance as yf
 
-from config import (CUENTA, PLANES, TICKER, ESTADO_FILE, REPORTS_DIR,
+from config import (CUENTA, PLANES, TICKER, SYMBOL_LIVE, ESTADO_FILE, REPORTS_DIR,
                     MAX_CONSEC_PERDIDAS, CIERRE_HORA, CIERRE_MIN)
 from estrategias import signal_orb_entry, signal_ict_entry, gestionar_posicion, signal_actividad_minima
 from filtro_noticias import check_noticia
@@ -22,7 +22,7 @@ from filtro_noticias import check_noticia
 LIVE_MODE = os.environ.get('LIVE_MODE', 'false').lower() == 'true'
 if LIVE_MODE:
     try:
-        from live_exec import submit_bracket_entry, get_open_position, flatten_position
+        from live_exec import submit_bracket_entry, get_open_position, flatten_position, fetch_historical_bars
     except Exception as _import_err:
         print('[BOT] ERROR importando live_exec: %s' % _import_err)
         print('[BOT] Continuando en modo simulacion.')
@@ -350,22 +350,29 @@ def main():
 
     # Descargar datos hasta ahora (solo velas completas)
     # 60d: ADX(14) necesita 2*14+2=30 dias de trading; 30d da ~29, insuficiente
-    print('Descargando %s (60d, 1h)...' % TICKER)
-    df = yf.download(TICKER, period='60d', interval='1h',
-                     auto_adjust=True, progress=False)
-    if hasattr(df.columns, 'levels'):
-        df.columns = [c[0] if isinstance(c, tuple) else c for c in df.columns]
-    df = df.dropna()
-    if df.empty:
-        print('Sin datos de yfinance — error de conexion o mercado cerrado.')
-        guardar_estado(estado)
-        return
-
-    # Solo velas que cerraron hace al menos 30 min (velas completas)
-    if df.index.tz is None:
-        df.index = df.index.tz_localize('UTC')
     cutoff = ahora_et - timedelta(minutes=30)
-    df_hasta_ahora = df[df.index.tz_convert(ET) <= cutoff].tz_convert(ET)   # ET para consistencia con backtests (VWAP)
+    if LIVE_MODE:
+        print('Descargando %s (60d, 1h) desde Rithmic...' % SYMBOL_LIVE)
+        df_hasta_ahora = fetch_historical_bars(num_trading_days=60)
+        if df_hasta_ahora is None or df_hasta_ahora.empty:
+            print('Sin datos de Rithmic — abortando.')
+            guardar_estado(estado)
+            return
+        df_hasta_ahora = df_hasta_ahora[df_hasta_ahora.index <= cutoff]
+    else:
+        print('Descargando %s (60d, 1h) desde yfinance...' % TICKER)
+        df = yf.download(TICKER, period='60d', interval='1h',
+                         auto_adjust=True, progress=False)
+        if hasattr(df.columns, 'levels'):
+            df.columns = [c[0] if isinstance(c, tuple) else c for c in df.columns]
+        df = df.dropna()
+        if df.empty:
+            print('Sin datos de yfinance — error de conexion o mercado cerrado.')
+            guardar_estado(estado)
+            return
+        if df.index.tz is None:
+            df.index = df.index.tz_localize('UTC')
+        df_hasta_ahora = df[df.index.tz_convert(ET) <= cutoff].tz_convert(ET)
 
     if df_hasta_ahora.empty:
         print('Sin datos completos aun (mercado recien abrio).')
