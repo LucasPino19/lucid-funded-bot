@@ -7,7 +7,7 @@ Para actualizar: mandame las fechas del nuevo año y lo actualizo en minutos.
 Fuentes: bls.gov/schedule (NFP/CPI/PPI) y federalreserve.gov (FOMC).
 """
 
-from datetime import date
+from datetime import date, timedelta
 
 
 _CALENDARIO = {
@@ -41,11 +41,12 @@ _CALENDARIO = {
 }
 
 
+_ULTIMA_FECHA = max(_CALENDARIO.keys())
+
+
 def check_noticia(fecha: date) -> tuple:
-    """
-    Devuelve (True, 'NFP') si hay evento de alto impacto dentro de la ventana ORB.
-    FOMC a las 2pm devuelve (False, None) — fuera de la ventana de ejecucion.
-    """
+    if fecha > _ULTIMA_FECHA - timedelta(days=30):
+        print('[FILTRO_NOTICIAS] WARNING: calendario expira el %s — actualizar pronto.' % _ULTIMA_FECHA)
     nombre = _CALENDARIO.get(fecha)
     if nombre:
         return True, nombre

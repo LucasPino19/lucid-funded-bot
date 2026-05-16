@@ -74,7 +74,21 @@ async def _submit_bracket_async(entry_signal):
         target_ticks=target_ticks,
     )
 
-    print('[LIVE] Orden enviada: %s' % str(result))
+    # Validar que Rithmic aceptó la orden (rp_code=['0'] = éxito)
+    resp = result[0] if (isinstance(result, list) and result) else result
+    if resp is not None:
+        rp = getattr(resp, 'rp_code', None)
+        if rp is not None:
+            rp_list = list(rp) if hasattr(rp, '__iter__') and not isinstance(rp, (str, bytes)) else [rp]
+            if rp_list and rp_list != ['0']:
+                print('[LIVE] ALERTA: Rithmic rechazó la orden — rp_code=%s' % rp_list)
+                try:
+                    await client.disconnect()
+                except Exception:
+                    pass
+                return None
+
+    print('[LIVE] Orden aceptada: %s | result=%s' % (order_id, str(result)))
     try:
         await client.disconnect()
     except Exception:
@@ -96,8 +110,8 @@ async def _get_position_async():
         sym = getattr(pos, 'symbol', '')
         if sym != SYMBOL_LIVE:
             continue
-        long_qty  = getattr(pos, 'open_long_qty',  0) or 0
-        short_qty = getattr(pos, 'open_short_qty', 0) or 0
+        long_qty  = getattr(pos, 'buy_qty',  0) or 0
+        short_qty = getattr(pos, 'sell_qty', 0) or 0
         net = long_qty - short_qty
         if net > 0:
             return net, 'LONG'
@@ -108,29 +122,66 @@ async def _get_position_async():
 
 
 async def _flatten_async(qty, direccion):
-    """Cierra la posicion abierta con orden de mercado."""
     client = _make_client()
     await client.connect()
-
-    tx_type  = TransactionType.SELL if direccion == 'LONG' else TransactionType.BUY
-    order_id = 'LFB_CLOSE_%s' % datetime.now(ET).strftime('%H%M%S')
-
-    print('[LIVE] Cerrando posicion: %s x%d → %s' % (direccion, qty, order_id))
-
-    await client.submit_order(
-        order_id=order_id,
-        symbol=SYMBOL_LIVE,
-        exchange=EXCHANGE_LIVE,
-        qty=qty,
-        transaction_type=tx_type,
-        order_type=OrderType.MARKET,
-    )
-
-    print('[LIVE] Cierre enviado: %s' % order_id)
     try:
-        await client.disconnect()
-    except Exception:
-        pass  # cierre ya enviado — ignorar error de disconnect
+        # 1. Cancelar legs SL/TP pendientes del bracket
+        try:
+            ordenes = await client.list_orders()
+            for orden in ordenes:
+                if getattr(orden, 'symbol', '') != SYMBOL_LIVE:
+                    continue
+                basket_id = getattr(orden, 'basket_id', None)
+                if basket_id:
+                    try:
+                        await client.cancel_order(basket_id=basket_id)
+                        print('[LIVE] Orden pendiente cancelada: basket_id=%s' % basket_id)
+                    except Exception as _e_cancel:
+                        print('[LIVE] No se pudo cancelar orden %s: %s' % (basket_id, _e_cancel))
+        except Exception as _e_list:
+            print('[LIVE] Advertencia al listar ordenes abiertas: %s' % _e_list)
+
+        # 2. Cerrar la posicion con market order
+        tx_type  = TransactionType.SELL if direccion == 'LONG' else TransactionType.BUY
+        order_id = 'LFB_CLOSE_%s' % datetime.now(ET).strftime('%H%M%S%f')[:-3]
+        print('[LIVE] Cerrando posicion: %s x%d -> %s' % (direccion, qty, order_id))
+        result_close = await client.submit_order(
+            order_id=order_id,
+            symbol=SYMBOL_LIVE,
+            exchange=EXCHANGE_LIVE,
+            qty=qty,
+            transaction_type=tx_type,
+            order_type=OrderType.MARKET,
+        )
+
+        # Verificar rp_code de la respuesta inmediata
+        resp_c = result_close[0] if (isinstance(result_close, list) and result_close) else result_close
+        if resp_c is not None:
+            rp_c = getattr(resp_c, 'rp_code', None)
+            if rp_c is not None:
+                rp_c_list = list(rp_c) if hasattr(rp_c, '__iter__') and not isinstance(rp_c, (str, bytes)) else [rp_c]
+                if rp_c_list and rp_c_list != ['0']:
+                    raise RuntimeError('Rithmic rechazo el cierre — rp_code=%s' % rp_c_list)
+
+        # 3. VERIFICAR que la posicion realmente esta flat
+        await asyncio.sleep(2)
+        positions = await client.list_positions()
+        for pos in positions:
+            if getattr(pos, 'symbol', '') != SYMBOL_LIVE:
+                continue
+            long_qty  = getattr(pos, 'buy_qty',  0) or 0
+            short_qty = getattr(pos, 'sell_qty', 0) or 0
+            net = long_qty - short_qty
+            if net != 0:
+                raise RuntimeError('Posicion sigue abierta despues del cierre: net=%d' % net)
+
+        print('[LIVE] Cierre confirmado FLAT: %s' % order_id)
+        return True
+    finally:
+        try:
+            await client.disconnect()
+        except Exception:
+            pass
 
 
 # ──────────────────────────────────────────────
@@ -156,8 +207,8 @@ def get_open_position():
 
 
 def flatten_position(qty, direccion):
-    """Cierra la posicion abierta."""
     try:
-        asyncio.run(_flatten_async(qty, direccion))
+        return asyncio.run(_flatten_async(qty, direccion))
     except Exception as e:
-        print('[LIVE] ERROR al cerrar posicion: %s' % e)
+        print('[LIVE] ERROR CRITICO al cerrar posicion: %s' % e)
+        return False

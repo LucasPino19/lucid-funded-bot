@@ -1,10 +1,12 @@
 """
-Backtest comparativo — 1 trade vs 2 trades/dia — LucidFlex 25K
-===============================================================
-Compara 3 escenarios en 10 evaluaciones distintas:
-  A: Config actual  — 1 trade/dia, riesgo 1%
-  B: 2 trades/dia   — ambos con riesgo 1% (segundo trade se saltea si ORB muy grande)
-  C: 2 trades/dia   — segundo trade fuerza 1 contrato si riesgo excede 1%
+Backtest comparativo — 1 trade vs 2 trades/dia, 1% vs 1.2% riesgo — LucidFlex 25K
+====================================================================================
+Compara 5 escenarios en N_EVALS evaluaciones distintas:
+  A: 1 trade/dia, riesgo 1%   (config actual)
+  B: 2 trades/dia, riesgo 1%  (2do se saltea si ORB muy grande)
+  C: 2 trades/dia, 2do forzado 1 contrato, riesgo 1%
+  D: 1 trade/dia, riesgo 1.2%
+  E: 2 trades/dia, 2do forzado 1 contrato, riesgo 1.2%
 """
 
 import yfinance as yf
@@ -23,14 +25,14 @@ ET        = ZoneInfo("America/New_York")
 CAPITAL_0 = float(PLANES[CUENTA]['capital_inicial'])
 TARGET    = PLANES[CUENTA]['profit_target']
 DRAWDOWN  = PLANES[CUENTA]['max_drawdown']
-ITB       = CAPITAL_0 + TARGET
-MLL_FIJO  = CAPITAL_0 - PLANES[CUENTA]['mll_lock']
+ITB       = CAPITAL_0 + DRAWDOWN   # $26,000: trigger lock MLL
+MLL_FIJO  = CAPITAL_0              # $25,000: MLL congelado
 N_EVALS   = 30
 WARMUP    = 30
 MAX_CONSEC_PERDIDAS = 2
 
 
-def orb_trades_dia(df_c, hoy, capital, orb_sizes, max_trades, force_2do):
+def orb_trades_dia(df_c, hoy, capital, orb_sizes, max_trades, force_2do, riesgo_pct=RIESGO_PCT):
     """
     Encuentra hasta max_trades señales ORB en el dia hoy.
     force_2do=True: el 2do trade usa 1 contrato forzado si riesgo > 1%.
@@ -110,7 +112,7 @@ def orb_trades_dia(df_c, hoy, capital, orb_sizes, max_trades, force_2do):
             if entrada is None:
                 continue
 
-            riesgo_usd      = capital_actual * RIESGO_PCT
+            riesgo_usd      = capital_actual * riesgo_pct
             riesgo_puntos   = abs(entrada - sl)
             riesgo_contrato = riesgo_puntos * MULT
 
@@ -156,7 +158,7 @@ def orb_trades_dia(df_c, hoy, capital, orb_sizes, max_trades, force_2do):
     return trades, sizes_nuevos
 
 
-def simular_eval(dias, start, max_trades, force_2do):
+def simular_eval(dias, start, max_trades, force_2do, riesgo_pct=RIESGO_PCT):
     capital   = CAPITAL_0
     peak      = CAPITAL_0
     orb_sizes = []
@@ -175,7 +177,7 @@ def simular_eval(dias, start, max_trades, force_2do):
             continue
 
         trades_dia, orb_sizes = orb_trades_dia(
-            df_c, hoy, capital, orb_sizes, max_trades, force_2do)
+            df_c, hoy, capital, orb_sizes, max_trades, force_2do, riesgo_pct)
 
         for t in trades_dia:
             if consecutivas >= MAX_CONSEC_PERDIDAS:
@@ -244,15 +246,17 @@ if __name__ == '__main__':
     starts      = sorted(random.sample(dias_utiles, N_EVALS))
 
     escenarios = [
-        ('A — 1 trade/dia  (actual)',      1, False),
-        ('B — 2 trades/dia (mismo riesgo)', 2, False),
-        ('C — 2 trades/dia (2do forzado)', 2, True),
+        ('A — 1 trade/dia,  1.0% riesgo (actual)',      1, False, 0.010),
+        ('B — 2 trades/dia, 1.0% riesgo (mismo riesgo)', 2, False, 0.010),
+        ('C — 2 trades/dia, 1.0% riesgo (2do forzado)', 2, True,  0.010),
+        ('D — 1 trade/dia,  1.2% riesgo',               1, False, 0.012),
+        ('E — 2 trades/dia, 1.2% riesgo (2do forzado)', 2, True,  0.012),
     ]
 
-    for nombre, max_t, force in escenarios:
+    for nombre, max_t, force, riesgo in escenarios:
         resultados = []
         for start in starts:
-            res, fin, cap, trades = simular_eval(dias, start, max_t, force)
+            res, fin, cap, trades = simular_eval(dias, start, max_t, force, riesgo)
             resultados.append({
                 'resultado': res, 'start': start, 'fin': fin,
                 'capital': cap, 'trades': trades,

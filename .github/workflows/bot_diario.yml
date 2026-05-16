@@ -3,6 +3,9 @@ name: LucidFlex Bot Intraday
 on:
   workflow_dispatch:
     # Disparado por cron-job.org via GitHub API (mas confiable que GitHub cron)
+  schedule:
+    # Respaldo: cada hora durante mercado (lun-vie, 14:35-22:35 UTC cubre DST e invierno)
+    - cron: '35 14-22 * * 1-5'
 
 concurrency:
   group: lucid-bot
@@ -37,10 +40,11 @@ jobs:
           RITHMIC_PASS:  ${{ secrets.RITHMIC_PASS }}
 
       - name: Guardar estado y reporte en el repo
+        if: always()
         run: |
           git config user.name  "LucidFlex Bot"
           git config user.email "bot@lucid"
-          git add data/estado.json reports/
+          git add data/estado.json reports/ || true
           git diff --staged --quiet || git commit -m "bot: run $(date +'%Y-%m-%d %H:%M UTC')"
-          git pull --rebase origin main
+          git pull --rebase -X ours origin main
           git push

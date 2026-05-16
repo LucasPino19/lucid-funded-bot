@@ -34,7 +34,8 @@ COSTO_CONTRATO = 4      # slippage $2.50 + comisión $1.50
 ORB_STOP_MULT   = 1.5   # stop = 1.5x el rango ORB
 ORB_TARGET_MULT = 1.5   # target = 1.5x el rango ORB
 ORB_VOLT_FILTRO = 1.5   # skip si ORB > 1.5x promedio 10 días
-ORB_HORA_INICIO = 9     # primera vela de sesión regular (9am ET)
+ORB_HORA_INICIO = 9     # primera vela de sesión regular (9:30 ET)
+ORB_MIN_INICIO  = 30
 ORB_VENTANA_H   = 13    # solo entrar antes de la 1:30pm ET
 ORB_VENTANA_M   = 30
 ADX_MIN         = 20    # mercado en tendencia si ADX > 20
@@ -57,8 +58,25 @@ CIERRE_MIN  = 30
 MAX_CONSEC_PERDIDAS = 2 # circuit breaker: parar si 2 pérdidas seguidas en el día
 
 # ── Live execution ──
-# Actualizar cada vez que ruede el contrato (Mar/Jun/Sep/Dec)
-SYMBOL_LIVE    = 'MESM6'      # Micro ES contrato activo en Rithmic (actualizar cada trimestre)
+def _front_month_mes():
+    """Calcula el contrato front-month de MES segun la fecha actual.
+    Rola al siguiente trimestre ~10 dias calendario antes del 3er viernes."""
+    from datetime import date, timedelta
+    today = date.today()
+    quarters = [(3, 'H'), (6, 'M'), (9, 'U'), (12, 'Z')]
+    for year_offset in (0, 1):
+        year = today.year + year_offset
+        for month_num, code in quarters:
+            first_day    = date(year, month_num, 1)
+            first_friday = first_day + timedelta(days=(4 - first_day.weekday()) % 7)
+            third_friday = first_friday + timedelta(days=14)
+            roll_date    = third_friday - timedelta(days=10)
+            if today < roll_date:
+                year_digit = str(year)[-1]
+                return 'MES%s%s' % (code, year_digit)
+    return 'MESH%s' % str(today.year + 1)[-1]  # fallback
+
+SYMBOL_LIVE = _front_month_mes()
 EXCHANGE_LIVE  = 'CME'
 RITHMIC_SYSTEM = 'LucidTrading'
 TICK_SIZE      = 0.25         # 1 tick MES = $1.25

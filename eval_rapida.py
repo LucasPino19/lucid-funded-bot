@@ -33,8 +33,8 @@ ET        = ZoneInfo("America/New_York")
 CAPITAL_0 = float(PLANES[CUENTA]['capital_inicial'])
 TARGET    = PLANES[CUENTA]['profit_target']
 DRAWDOWN  = PLANES[CUENTA]['max_drawdown']
-ITB       = CAPITAL_0 + TARGET
-MLL_FIJO  = CAPITAL_0 - PLANES[CUENTA]['mll_lock']
+ITB       = CAPITAL_0 + DRAWDOWN   # $26,000: trigger lock MLL
+MLL_FIJO  = CAPITAL_0              # $25,000: MLL congelado
 
 N_CUENTAS      = 100
 WARMUP         = 30

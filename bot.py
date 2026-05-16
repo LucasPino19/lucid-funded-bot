@@ -31,6 +31,8 @@ if LIVE_MODE:
 ET   = ZoneInfo("America/New_York")
 PLAN = PLANES[CUENTA]
 
+_estado_emergencia = None  # referencia al estado en memoria para el handler de crash
+
 
 # ══════════════════════════════════════════════
 # ESTADO
@@ -51,9 +53,12 @@ def estado_inicial(estrategia):
         'ultimo_dia':       '',
         'orb_sizes':        [],
         'obs_usados':       [],
-        'posicion_abierta': None,   # posicion open intraday
-        'ya_opero_hoy':     '',     # fecha del ultimo trade del dia
-        'peak_capital':     PLAN['capital_inicial'],  # trailing drawdown EOD
+        'posicion_abierta':   None,  # posicion open intraday
+        'ya_opero_hoy':       '',   # fecha del ultimo trade del dia
+        'peak_capital':       PLAN['capital_inicial'],  # trailing drawdown EOD
+        'wins_seguidos':      0,    # anti-martingale: wins consecutivos globales
+        'entradas_bloqueadas': '',  # fecha en que se bloquearon entradas (Rithmic safety)
+        'orb_size_dia':        '',  # fecha de la ultima actualizacion de orb_sizes
     }
 
 
@@ -94,13 +99,13 @@ def aplicar_reglas(cuenta_estado, dia_str):
     gan_por_dia    = cuenta_estado['ganancia_por_dia']
     trades         = cuenta_estado['trades']
 
-    # Trailing drawdown EOD con ITB lock (regla real LucidFlex)
-    # Fase 1: MLL sube con el peak EOD — peak se actualiza una vez por dia en el loop principal
-    # Fase 2: cuando peak >= capital_inicial + max_drawdown, MLL se congela en capital_inicial
-    # Ej. 25k: lock cuando peak >= $26,000 → MLL fijo en $25,000 para siempre
+    # Trailing drawdown EOD — regla LucidFlex Flex Eval
+    # Fase 1 (trailing): MLL = peak_EOD - max_drawdown. Sube con cada nuevo maximo EOD.
+    # Fase 2 (lock):     cuando peak >= capital_inicial + max_drawdown ($26,000),
+    #                    MLL se congela en capital_inicial ($25,000) para siempre.
     capital_inicial = PLAN['capital_inicial']
-    itb             = capital_inicial + PLAN['max_drawdown']   # $26,000 para 25k
-    mll_fijo        = capital_inicial                          # $25,000 para 25k
+    itb             = capital_inicial + PLAN['max_drawdown']   # $26,000: lock trigger
+    mll_fijo        = capital_inicial                          # $25,000: MLL congelado
 
     peak = cuenta_estado.get('peak_capital', capital_inicial)  # actualizado EOD en bot.py
 
@@ -113,16 +118,15 @@ def aplicar_reglas(cuenta_estado, dia_str):
         return 'explotada', 'Drawdown alcanzado — capital: $%.0f | limite: $%.0f' % (capital, limite_drawdown)
 
     if ganancia_total >= PLAN['profit_target']:
-        max_dia    = max(gan_por_dia.values()) if gan_por_dia else 0
-        dias_op    = len(gan_por_dia)
-        consistencia_ok = ganancia_total > 0 and max_dia / ganancia_total <= 0.50
-        min_dias_ok     = dias_op >= 2
+        max_dia         = max(gan_por_dia.values()) if gan_por_dia else 0
+        dias_op         = len(gan_por_dia)
+        # Usar suma del dict para evitar drift de float entre ganancia_total y gan_por_dia
+        total_check     = sum(gan_por_dia.values()) if gan_por_dia else ganancia_total
+        consistencia_ok = total_check > 0 and max_dia / total_check <= 0.50
 
-        if consistencia_ok and min_dias_ok:
+        if consistencia_ok:
             return 'pasada', 'Target alcanzado: $%+.0f en %d dias / %d trades' % (ganancia_total, dias_op, len(trades))
-        if not min_dias_ok:
-            return 'activa', 'Target alcanzado pero faltan dias de trading (%d/2 minimo)' % dias_op
-        return 'activa', 'Target alcanzado pero consistencia viola 50%% — dia max: $%.0f / total: $%.0f' % (max_dia, ganancia_total)
+        return 'activa', 'Target alcanzado pero consistencia viola 50%% — dia max: $%.0f / total: $%.0f' % (max_dia, total_check)
 
     return 'activa', ''
 
@@ -134,18 +138,29 @@ def aplicar_reglas(cuenta_estado, dia_str):
 def procesar_trade(cuenta_estado, trade, dia_str):
     ganancia = trade['ganancia']
 
-    cuenta_estado['capital']        += ganancia
-    cuenta_estado['ganancia_total'] += ganancia
+    cuenta_estado['capital']        = round(cuenta_estado['capital']        + ganancia, 2)
+    cuenta_estado['ganancia_total'] = round(cuenta_estado['ganancia_total'] + ganancia, 2)
 
     prev = cuenta_estado['ganancia_por_dia'].get(dia_str, 0)
     cuenta_estado['ganancia_por_dia'][dia_str] = round(prev + ganancia, 2)
 
-    if trade['resultado'] == 'stop_loss':
+    if trade['resultado'] == 'take_profit':
+        cuenta_estado['consecutivas_hoy']  = 0
+        cuenta_estado['wins_seguidos']      = cuenta_estado.get('wins_seguidos', 0) + 1
+    elif trade['resultado'] == 'stop_loss':
         cuenta_estado['consecutivas_hoy'] += 1
-    else:
-        cuenta_estado['consecutivas_hoy'] = 0
+        cuenta_estado['wins_seguidos']     = 0
+    else:  # timeout
+        cuenta_estado['consecutivas_hoy']  = 0
+        cuenta_estado['wins_seguidos']     = 0
 
     cuenta_estado['ultimo_dia'] = dia_str
+
+    # Trailing intraday: actualizar peak despues de cada trade (solo sube — mas conservador)
+    cuenta_estado['peak_capital'] = max(
+        cuenta_estado.get('peak_capital', PLAN['capital_inicial']),
+        cuenta_estado['capital']
+    )
 
     cuenta_estado['trades'].append({
         'dia':        dia_str,
@@ -284,7 +299,9 @@ def main():
         print('Fin de semana — sin operaciones.')
         return
 
+    global _estado_emergencia
     estado = cargar_estado()
+    _estado_emergencia = estado  # mismo objeto — mutations visibles desde el handler
 
     # Cerrar posiciones huerfanas de dias anteriores
     for est in list(estado.keys()):
@@ -296,19 +313,38 @@ def main():
                     qty_real, dir_real = get_open_position()
                     if qty_real > 0:
                         print('[%s] Cerrando posicion real huerfana: %s x%d' % (est, dir_real, qty_real))
-                        flatten_position(qty_real, dir_real)
+                        ok = flatten_position(qty_real, dir_real)
+                        if not ok:
+                            print('[%s] FATAL: no se pudo cerrar huerfana — bloqueando entradas hoy.' % est)
+                            estado[est]['entradas_bloqueadas'] = dia_str
+                            continue
                 except Exception as _e:
                     print('[%s] Error al cerrar huerfana en Rithmic: %s' % (est, _e))
+                    estado[est]['entradas_bloqueadas'] = dia_str
+                    continue
             estado[est]['posicion_abierta'] = None
 
-    # Verificar posicion real en Rithmic aunque el estado local diga "sin posicion"
-    # Protege contra crash entre submit_order y guardar_estado (evita doble entrada)
-    if LIVE_MODE and not estado['ORB_LIVE'].get('posicion_abierta'):
+    # Reconciliacion completa Rithmic <-> estado local
+    if LIVE_MODE:
         try:
             qty_real, dir_real = get_open_position()
-            if qty_real > 0:
-                print('[BOT] ALERTA: Rithmic tiene posicion abierta no registrada — bloqueando entradas hoy.')
-                estado['ORB_LIVE']['ya_opero_hoy'] = dia_str
+            local_pos = estado['ORB_LIVE'].get('posicion_abierta')
+
+            if qty_real > 0 and not local_pos:
+                print('[BOT] ALERTA: Rithmic tiene posicion no registrada (%s x%d) — bloqueando entradas hoy.' % (
+                    dir_real, qty_real))
+                estado['ORB_LIVE']['ya_opero_hoy']        = dia_str
+                estado['ORB_LIVE']['entradas_bloqueadas'] = dia_str
+            elif qty_real > 0 and local_pos:
+                if (local_pos.get('direccion') != dir_real or
+                        local_pos.get('contratos') != qty_real):
+                    print('[BOT] ALERTA: desincronizado — local %s x%d vs Rithmic %s x%d' % (
+                        local_pos.get('direccion'), local_pos.get('contratos'),
+                        dir_real, qty_real))
+                    estado['ORB_LIVE']['entradas_bloqueadas'] = dia_str
+            elif qty_real == 0 and local_pos:
+                print('[BOT] ALERTA: posicion local existe pero Rithmic flat — limpiando local.')
+                estado['ORB_LIVE']['posicion_abierta'] = None
         except Exception as _e:
             print('[BOT] No se pudo verificar posicion en Rithmic al inicio: %s' % _e)
 
@@ -329,7 +365,7 @@ def main():
     if df.index.tz is None:
         df.index = df.index.tz_localize('UTC')
     cutoff = ahora_et - timedelta(minutes=30)
-    df_hasta_ahora = df[df.index.tz_convert(ET) <= cutoff]
+    df_hasta_ahora = df[df.index.tz_convert(ET) <= cutoff].tz_convert(ET)   # ET para consistencia con backtests (VWAP)
 
     if df_hasta_ahora.empty:
         print('Sin datos completos aun (mercado recien abrio).')
@@ -370,11 +406,22 @@ def main():
         es_eod = (ahora_et.hour > CIERRE_HORA or
                   (ahora_et.hour == CIERRE_HORA and ahora_et.minute >= CIERRE_MIN))
         if LIVE_MODE and c.get('posicion_abierta') and es_eod:
-            pos = c['posicion_abierta']
-            qty_real, dir_real = get_open_position()
-            if qty_real > 0:
-                print('[%s] EOD — cerrando posicion real %s x%d' % (estrategia, dir_real, qty_real))
-                flatten_position(qty_real, dir_real)
+            cierre_eod_ok = True
+            try:
+                qty_real, dir_real = get_open_position()
+                if qty_real > 0:
+                    print('[%s] EOD — cerrando posicion real %s x%d' % (estrategia, dir_real, qty_real))
+                    cierre_eod_ok = flatten_position(qty_real, dir_real)
+                    if not cierre_eod_ok:
+                        print('[%s] FATAL: cierre EOD no confirmado en Rithmic — NO se procesa trade local.' % estrategia)
+                        estado[estrategia]['entradas_bloqueadas'] = dia_str
+                        guardar_estado(estado)
+                        continue
+            except Exception as _e_eod:
+                print('[%s] Error al cerrar posicion EOD en Rithmic: %s' % (estrategia, _e_eod))
+                estado[estrategia]['entradas_bloqueadas'] = dia_str
+                guardar_estado(estado)
+                continue
 
         # ── Gestionar posicion abierta ──
         if c.get('posicion_abierta'):
@@ -385,25 +432,28 @@ def main():
                     trade_cerrado['puntos'], trade_cerrado['ganancia']))
                 estado[estrategia] = procesar_trade(c, trade_cerrado, dia_str)
                 estado[estrategia]['posicion_abierta'] = None
+                estado[estrategia]['ya_opero_hoy']     = dia_str   # evita reset del circuit breaker en runs siguientes
                 trades_cerrados_hoy[estrategia] = trade_cerrado
                 continue  # buscar 2do trade en el proximo run (siguiente barra), no en esta misma vela
             else:
-                pos = c['posicion_abierta']
+                _pos = c['posicion_abierta']
                 print('[%s] Posicion abierta — %s desde %.2f | SL %.2f | TP %.2f' % (
-                    estrategia, pos['direccion'], pos['entrada'],
-                    pos['sl'], pos['tp']))
+                    estrategia, _pos['direccion'], _pos['entrada'],
+                    _pos['sl'], _pos['tp']))
                 continue  # posicion todavia abierta — no buscar nueva entrada
-
-        # ── Filtro de noticias (se chequea antes de cualquier entrada, incluso actividad forzada) ──
-        hay_noticia, nombre_ev = check_noticia(hoy)
-        if hay_noticia:
-            print('[%s] Noticia alto impacto hoy (%s) — sin operaciones.' % (estrategia, nombre_ev))
-            continue
 
         # ── Actividad mínima: si pasaron >= 28 días sin trade ──
         ultimo_trade = c.get('ultimo_dia', '')
-        dias_sin_trade = (hoy - date.fromisoformat(ultimo_trade)).days if ultimo_trade else 0
+        dias_sin_trade = (hoy - date.fromisoformat(ultimo_trade)).days if ultimo_trade else 999
         forzar_actividad = dias_sin_trade >= 28 and c.get('ya_opero_hoy') != dia_str
+
+        if not forzar_actividad:
+            hay_noticia, nombre_ev = check_noticia(hoy)
+            if hay_noticia:
+                print('[%s] Noticia alto impacto hoy (%s) — sin operaciones.' % (estrategia, nombre_ev))
+                continue
+        else:
+            print('[%s] ACTIVIDAD FORZADA prioritaria — ignorando filtro de noticias.' % estrategia)
 
         if forzar_actividad:
             print('[%s] ACTIVIDAD FORZADA — %d dias sin trade — entrando con 1 contrato minimo.' % (estrategia, dias_sin_trade))
@@ -426,17 +476,19 @@ def main():
                     estado[estrategia]['ultimo_dia']        = dia_str
             continue
 
-        # ── Buscar entrada nueva (hasta 2 trades/día si el 1ro ya cerró) ──
+        # ── Buscar entrada nueva (hasta 3 trades/día si el anterior ya cerró) ──
         trades_hoy      = sum(1 for t in c['trades'] if t['dia'] == dia_str)
-        puede_entrar    = (c.get('ya_opero_hoy') != dia_str or
-                           (trades_hoy == 1 and c.get('posicion_abierta') is None))
+        bloqueado       = c.get('entradas_bloqueadas') == dia_str
+        puede_entrar    = (trades_hoy < 3 and c.get('posicion_abierta') is None and not bloqueado)
 
         if puede_entrar:
             if estrategia in ('ORB_LIVE', 'ORB_SIM'):
-                es_segundo = (trades_hoy == 1)
+                es_segundo   = (trades_hoy >= 1)   # fuerza 1 contrato en trade 2 y 3 si ORB es grande
+                ws           = c.get('wins_seguidos', 0)
+                riesgo_activo = 0.015 if ws >= 2 else None   # anti-martingale
                 entry, orb_sizes_nuevos, motivo = signal_orb_entry(
                     df_hasta_ahora, hoy, c['capital'], c['orb_sizes'],
-                    force_contrato=es_segundo)
+                    force_contrato=es_segundo, riesgo_pct=riesgo_activo)
                 # Solo actualizar orb_sizes una vez por dia — evita duplicados por multiples runs
                 if c.get('orb_size_dia') != dia_str:
                     estado[estrategia]['orb_sizes']   = orb_sizes_nuevos[-20:]
@@ -473,10 +525,10 @@ def main():
                     print('[ICT] Sin senal — %s' % (motivo or 'sin setup'))
 
         else:
-            if trades_hoy >= 2:
-                print('[%s] 2 trades hoy — esperando manana.' % estrategia)
+            if bloqueado:
+                print('[%s] Entradas bloqueadas hoy (posicion Rithmic no registrada).' % estrategia)
             else:
-                print('[%s] Ya opero hoy — esperando manana.' % estrategia)
+                print('[%s] 3 trades hoy — esperando manana.' % estrategia)
 
     guardar_estado(estado)
     generar_reporte(estado, dia_str, trades_cerrados_hoy)
@@ -499,10 +551,8 @@ if __name__ == '__main__':
         traceback.print_exc()
         print('\n[BOT] Excepcion no manejada — guardando estado de emergencia.')
         try:
-            from datetime import datetime
-            from zoneinfo import ZoneInfo
-            _et = ZoneInfo("America/New_York")
-            _estado = cargar_estado()
-            guardar_estado(_estado)
+            # Usar el estado en memoria si ya fue cargado — captura cambios previos al crash
+            _save = _estado_emergencia if _estado_emergencia is not None else cargar_estado()
+            guardar_estado(_save)
         except Exception:
             pass

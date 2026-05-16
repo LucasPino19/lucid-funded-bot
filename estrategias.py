@@ -5,10 +5,12 @@ Cada función recibe los datos del día y devuelve el trade ejecutado (o None).
 """
 
 import numpy as np
+import pandas as pd
+from datetime import timedelta
 from zoneinfo import ZoneInfo
 from config import (MULT, RIESGO_PCT, COSTO_CONTRATO, ADX_MIN,
                     ORB_STOP_MULT, ORB_TARGET_MULT, ORB_VOLT_FILTRO,
-                    ORB_HORA_INICIO, ORB_VENTANA_H, ORB_VENTANA_M,
+                    ORB_HORA_INICIO, ORB_MIN_INICIO, ORB_VENTANA_H, ORB_VENTANA_M,
                     ICT_IMPULSO, ICT_STOP_MULT, ICT_TARGET_MULT, ICT_LOOKBACK,
                     CIERRE_HORA, CIERRE_MIN, PLANES, CUENTA)
 
@@ -34,13 +36,22 @@ def calcular_ema_diaria(df, period=20):
 
 
 def calcular_vwap(df):
+    """VWAP que resetea cada dia en la apertura de RTH (9:30 ET)."""
     tp = (df['High'] + df['Low'] + df['Close']) / 3
     df = df.copy()
-    df['_tp']    = tp
-    df['_tpv']   = tp * df['Volume']
-    df['_date']  = df.index.normalize()
-    df['_ctpv']  = df.groupby('_date')['_tpv'].cumsum()
-    df['_cvol']  = df.groupby('_date')['Volume'].cumsum()
+    df['_tp']  = tp
+    df['_tpv'] = tp * df['Volume']
+
+    et_idx = df.index.tz_convert(ET) if df.index.tz is not None else df.index
+    sessions = []
+    for ts in et_idx:
+        if (ts.hour, ts.minute) < (9, 30):
+            sessions.append((ts - timedelta(days=1)).normalize())
+        else:
+            sessions.append(ts.normalize())
+    df['_session'] = sessions
+    df['_ctpv']    = df.groupby('_session')['_tpv'].cumsum()
+    df['_cvol']    = df.groupby('_session')['Volume'].cumsum()
     vwap = df['_ctpv'] / df['_cvol'].replace(0, float('nan'))
     return vwap.ffill().values
 
@@ -91,28 +102,6 @@ def calcular_adx_ayer(df, period=14):
     return float(adx[-2])  # ADX de ayer (penúltimo día)
 
 
-def _simular_salida(direccion, indices_resto, highs, lows, closes, sl, tp, n_total):
-    """Simula stop/target en el resto del día. Cierra antes de las 4:30pm."""
-    if not indices_resto:
-        return 'timeout', closes[n_total - 1]  # sin velas restantes: cierra al último close
-    resultado     = 'timeout'
-    precio_salida = closes[indices_resto[-1]]
-
-    for m in indices_resto:
-        if direccion == 'LONG':
-            if lows[m] <= sl:
-                return 'stop_loss', sl
-            if highs[m] >= tp:
-                return 'take_profit', tp
-        else:
-            if highs[m] >= sl:
-                return 'stop_loss', sl
-            if lows[m] <= tp:
-                return 'take_profit', tp
-
-    return resultado, precio_salida
-
-
 def _calcular_trade(capital, entrada, sl, direccion, resultado, precio_salida, contratos):
     puntos         = (precio_salida - entrada) if direccion == 'LONG' else (entrada - precio_salida)
     ganancia_bruta = puntos * MULT * contratos
@@ -121,127 +110,7 @@ def _calcular_trade(capital, entrada, sl, direccion, resultado, precio_salida, c
 
 
 # ══════════════════════════════════════════════
-# ESTRATEGIA 1 — ORB + VWAP (con filtro ADX)
-# ══════════════════════════════════════════════
-
-def signal_orb(df_completo, fecha_hoy, capital, orb_sizes_hist):
-    """
-    Busca señal ORB para fecha_hoy en df_completo.
-    - df_completo: últimos 30+ días de datos 1h
-    - fecha_hoy:   date() del día a evaluar
-    - orb_sizes_hist: lista de últimos tamaños ORB (para filtro de volatilidad)
-    Devuelve dict con el trade o None.
-    """
-    max_c = PLANES[CUENTA]['max_contratos']
-
-    # Filtro ADX — mercado tendencial?
-    adx_ayer = calcular_adx_ayer(df_completo)
-    if adx_ayer < ADX_MIN and adx_ayer > 0:
-        return None, orb_sizes_hist, 'ADX %.1f < %d — mercado lateral, skip' % (adx_ayer, ADX_MIN)
-
-    vwap_vals = calcular_vwap(df_completo)
-    closes    = df_completo['Close'].values
-    highs     = df_completo['High'].values
-    lows      = df_completo['Low'].values
-    fechas    = df_completo.index
-
-    # Índices del día de hoy
-    indices_hoy = [i for i, ts in enumerate(fechas)
-                   if ts.astimezone(ET).date() == fecha_hoy]
-
-    if len(indices_hoy) < 3:
-        return None, orb_sizes_hist, 'Pocos datos para hoy'
-
-    # Primera vela de sesion regular (>= 9am ET) = rango ORB
-    i0 = next((i for i in indices_hoy
-               if fechas[i].astimezone(ET).hour >= ORB_HORA_INICIO), None)
-    if i0 is None:
-        return None, orb_sizes_hist, 'Sin vela de sesion regular'
-    orb_high = highs[i0]
-    orb_low  = lows[i0]
-    orb_size = orb_high - orb_low
-
-    if orb_size <= 0:
-        return None, orb_sizes_hist, 'ORB size = 0'
-
-    # Filtro de volatilidad extrema
-    sizes_nuevos = orb_sizes_hist.copy()
-    if len(orb_sizes_hist) >= 5:
-        promedio = np.mean(orb_sizes_hist[-10:])
-        if orb_size > promedio * ORB_VOLT_FILTRO:
-            sizes_nuevos.append(orb_size)
-            return None, sizes_nuevos, 'ORB %.1f > %.1fx promedio — volatilidad extrema, skip' % (orb_size, ORB_VOLT_FILTRO)
-    sizes_nuevos.append(orb_size)
-
-    stop_dist   = orb_size * ORB_STOP_MULT
-    target_dist = orb_size * ORB_TARGET_MULT
-
-    # Buscar breakout en las velas POSTERIORES a la vela ORB
-    indices_post_orb = [i for i in indices_hoy if i > i0]
-    for k, i in enumerate(indices_post_orb, 1):
-        hora_et = fechas[i].astimezone(ET)
-        if hora_et.hour > CIERRE_HORA or (hora_et.hour == CIERRE_HORA and hora_et.minute >= CIERRE_MIN):
-            break
-        if hora_et.hour > ORB_VENTANA_H or (hora_et.hour == ORB_VENTANA_H and hora_et.minute >= ORB_VENTANA_M):
-            break
-
-        precio = closes[i]
-        vwap_i = vwap_vals[i]
-        entrada = None
-
-        if closes[i] > orb_high and precio > vwap_i:
-            entrada   = orb_high
-            sl        = entrada - stop_dist
-            tp        = entrada + target_dist
-            direccion = 'LONG'
-        elif closes[i] < orb_low and precio < vwap_i:
-            entrada   = orb_low
-            sl        = entrada + stop_dist
-            tp        = entrada - target_dist
-            direccion = 'SHORT'
-
-        if entrada is None:
-            continue
-
-        riesgo_usd      = capital * RIESGO_PCT
-        riesgo_puntos   = abs(entrada - sl)
-        riesgo_contrato = riesgo_puntos * MULT
-        if riesgo_contrato == 0 or riesgo_contrato > riesgo_usd:
-            continue
-        contratos = min(max(1, int(riesgo_usd / riesgo_contrato)), max_c)
-
-        # Simular el resto del día
-        resto = [j for j in indices_post_orb[k:]
-                 if not (fechas[j].astimezone(ET).hour > CIERRE_HORA or
-                         (fechas[j].astimezone(ET).hour == CIERRE_HORA and
-                          fechas[j].astimezone(ET).minute >= CIERRE_MIN))]
-        resultado, precio_salida = _simular_salida(
-            direccion, resto, highs, lows, closes, sl, tp, len(closes)
-        )
-
-        puntos, ganancia = _calcular_trade(capital, entrada, sl, direccion, resultado, precio_salida, contratos)
-
-        return {
-            'estrategia':  'ORB',
-            'direccion':   direccion,
-            'entrada':     round(entrada, 2),
-            'sl':          round(sl, 2),
-            'tp':          round(tp, 2),
-            'salida':      round(precio_salida, 2),
-            'resultado':   resultado,
-            'contratos':   contratos,
-            'puntos':      puntos,
-            'ganancia':    ganancia,
-            'orb_size':    round(orb_size, 2),
-            'adx':         round(adx_ayer, 1),
-            'hora_entrada': fechas[i].astimezone(ET).hour,
-        }, sizes_nuevos, None
-
-    return None, sizes_nuevos, 'Sin señal ORB hoy'
-
-
-# ══════════════════════════════════════════════
-# ESTRATEGIA 2 — ICT ORDER BLOCKS
+# ESTRATEGIA 2 — ICT ORDER BLOCKS (detección)
 # ══════════════════════════════════════════════
 
 def detectar_obs(df, impulso_minimo=ICT_IMPULSO):
@@ -275,124 +144,11 @@ def detectar_obs(df, impulso_minimo=ICT_IMPULSO):
     return ob_bull, ob_bear
 
 
-def signal_ict(df_completo, fecha_hoy, capital, obs_usados):
-    """
-    Busca señal ICT para fecha_hoy en df_completo (últimos 90 días).
-    - obs_usados: set de strings 'indice_tipo' ya utilizados
-    Devuelve dict con el trade o None.
-    """
-    max_c = PLANES[CUENTA]['max_contratos']
-
-    # Filtro EMA(20): solo LONG si precio > EMA, solo SHORT si precio < EMA
-    ema_ayer, close_ayer = calcular_ema_diaria(df_completo)
-    tendencia = None
-    if ema_ayer is not None:
-        tendencia = 'LONG' if close_ayer > ema_ayer else 'SHORT'
-
-    vwap_vals = calcular_vwap(df_completo)
-    closes    = df_completo['Close'].values
-    highs     = df_completo['High'].values
-    lows      = df_completo['Low'].values
-    fechas    = df_completo.index
-
-    ob_bull, ob_bear = detectar_obs(df_completo)
-
-    # Índices del día de hoy con horario válido
-    indices_hoy = [i for i, ts in enumerate(fechas)
-                   if ts.astimezone(ET).date() == fecha_hoy
-                   and not (ts.astimezone(ET).hour > CIERRE_HORA or
-                            (ts.astimezone(ET).hour == CIERRE_HORA and
-                             ts.astimezone(ET).minute >= CIERRE_MIN))]
-
-    if not indices_hoy:
-        return None, obs_usados, 'Sin datos para hoy'
-
-    for ob_list, tipo in [(ob_bull, 'bull'), (ob_bear, 'bear')]:
-        for ob in ob_list:
-            idx     = ob['indice']
-            ob_high = ob['ob_high']
-            ob_low  = ob['ob_low']
-            ob_size = ob_high - ob_low
-            clave   = '%d_%s' % (idx, tipo)
-
-            if clave in obs_usados or ob_size <= 0:
-                continue
-
-            # Filtro EMA: saltear OBs contra la tendencia diaria
-            if tendencia == 'LONG' and tipo == 'bear':
-                continue
-            if tendencia == 'SHORT' and tipo == 'bull':
-                continue
-
-            for k, j in enumerate(indices_hoy):
-                if j <= idx + 3:
-                    continue
-
-                vwap_j  = vwap_vals[j]
-                entrada = None
-
-                if (tipo == 'bull'
-                        and lows[j] <= ob_high and highs[j] >= ob_low
-                        and closes[j] > vwap_j):
-                    entrada   = ob_high
-                    sl        = ob_low - ob_size * ICT_STOP_MULT
-                    tp        = ob_high + ob_size * ICT_TARGET_MULT
-                    direccion = 'LONG'
-
-                elif (tipo == 'bear'
-                        and highs[j] >= ob_low and lows[j] <= ob_high
-                        and closes[j] < vwap_j):
-                    entrada   = ob_low
-                    sl        = ob_high + ob_size * ICT_STOP_MULT
-                    tp        = ob_low  - ob_size * ICT_TARGET_MULT
-                    direccion = 'SHORT'
-
-                if entrada is None:
-                    continue
-
-                riesgo_usd      = capital * RIESGO_PCT
-                riesgo_puntos   = abs(entrada - sl)
-                riesgo_contrato = riesgo_puntos * MULT
-                if riesgo_contrato == 0 or riesgo_contrato > riesgo_usd:
-                    continue
-                contratos = min(max(1, int(riesgo_usd / riesgo_contrato)), max_c)
-
-                resto = indices_hoy[k+1:]
-                if not resto:
-                    continue  # sin tiempo restante para gestionar, skip
-                resultado, precio_salida = _simular_salida(
-                    direccion, resto, highs, lows, closes, sl, tp, len(closes)
-                )
-
-                puntos, ganancia = _calcular_trade(
-                    capital, entrada, sl, direccion, resultado, precio_salida, contratos
-                )
-
-                obs_usados_nuevos = obs_usados | {clave}
-                return {
-                    'estrategia': 'ICT',
-                    'ob_clave':   clave,
-                    'tipo_ob':    tipo,
-                    'direccion':  direccion,
-                    'entrada':    round(entrada, 2),
-                    'sl':         round(sl, 2),
-                    'tp':         round(tp, 2),
-                    'salida':     round(precio_salida, 2),
-                    'resultado':  resultado,
-                    'contratos':  contratos,
-                    'puntos':     puntos,
-                    'ganancia':   ganancia,
-                    'ob_size':    round(ob_size, 2),
-                }, obs_usados_nuevos, None
-
-    return None, obs_usados, 'Sin OB válido tocado hoy'
-
-
 # ══════════════════════════════════════════════
 # MODO INTRADAY — entry en tiempo real
 # ══════════════════════════════════════════════
 
-def signal_orb_entry(df_completo, fecha_hoy, capital, orb_sizes_hist, force_contrato=False):
+def signal_orb_entry(df_completo, fecha_hoy, capital, orb_sizes_hist, force_contrato=False, riesgo_pct=None):
     """
     Verifica si la última vela completa de hoy genera entrada ORB.
     Solo mira la vela más reciente (no simula el día entero).
@@ -401,7 +157,9 @@ def signal_orb_entry(df_completo, fecha_hoy, capital, orb_sizes_hist, force_cont
     max_c = PLANES[CUENTA]['max_contratos']
 
     adx_ayer = calcular_adx_ayer(df_completo)
-    if adx_ayer < ADX_MIN and adx_ayer > 0:
+    if adx_ayer == 0.0:
+        pass  # datos insuficientes para ADX — se opera sin filtro de tendencia (intencional)
+    elif adx_ayer < ADX_MIN:
         return None, orb_sizes_hist, 'ADX %.1f < %d' % (adx_ayer, ADX_MIN)
 
     vwap_vals = calcular_vwap(df_completo)
@@ -417,7 +175,8 @@ def signal_orb_entry(df_completo, fecha_hoy, capital, orb_sizes_hist, force_cont
         return None, orb_sizes_hist, 'Necesito >= 2 velas del dia'
 
     i0 = next((i for i in indices_hoy
-               if fechas[i].astimezone(ET).hour >= ORB_HORA_INICIO), None)
+               if (fechas[i].astimezone(ET).hour, fechas[i].astimezone(ET).minute) >=
+                  (ORB_HORA_INICIO, ORB_MIN_INICIO)), None)
     if i0 is None:
         return None, orb_sizes_hist, 'Sin vela de sesion regular aun'
     orb_high = highs[i0]
@@ -467,7 +226,8 @@ def signal_orb_entry(df_completo, fecha_hoy, capital, orb_sizes_hist, force_cont
     if entrada is None:
         return None, sizes_nuevos, 'Sin senal en ultima vela'
 
-    riesgo_usd      = capital * RIESGO_PCT
+    pct_efectivo    = riesgo_pct if riesgo_pct is not None else RIESGO_PCT
+    riesgo_usd      = capital * pct_efectivo
     riesgo_puntos   = abs(entrada - sl)
     riesgo_contrato = riesgo_puntos * MULT
     if riesgo_contrato == 0:
@@ -608,6 +368,18 @@ def gestionar_posicion(posicion, df_completo, fecha_hoy, force_eod=False):
                    if ts.astimezone(ET).date() == fecha_hoy]
 
     if not indices_hoy:
+        if force_eod:
+            # yfinance aun no tiene velas de hoy — usar el ultimo close disponible
+            precio_salida = closes[-1]
+            puntos, ganancia = _calcular_trade(
+                None, entrada, sl, direccion, 'timeout', precio_salida, contratos)
+            return {
+                **posicion,
+                'salida':    round(precio_salida, 2),
+                'resultado': 'timeout',
+                'puntos':    puntos,
+                'ganancia':  ganancia,
+            }
         return None
 
     hora_entrada = posicion.get('hora_entrada')
@@ -672,141 +444,42 @@ def gestionar_posicion(posicion, df_completo, fecha_hoy, force_eod=False):
     return None
 
 
-# ══════════════════════════════════════════════
-# ESTRATEGIA 3 — ICT KILL ZONES (1h)
-# ══════════════════════════════════════════════
-# Resultados backtest 2 años (500 sims, seeds 42/123/456/789/999):
-#   - 1% riesgo:  64% pasadas, 30% explosiones, ROI 1002%, ~33 dias
-#   - 0.5% riesgo: 84% pasadas,  5% explosiones, ROI 1265%, ~75 dias
-# Combinado con ORB (ORB 1% + KZ 0.5%): 94% pasadas, 6% explosiones, ROI 1464%
-# Para activar: llamar desde bot.py con riesgo_pct=0.005
-
-def signal_kz(df_completo, fecha_hoy, capital, riesgo_pct=0.005):
-    """
-    ICT Kill Zone — NY Open (7am-12pm ET) en velas 1h.
-    Detecta breakout de swing H/L de las 3 velas previas, confirmado por VWAP.
-    Por defecto usa 0.5% de riesgo (version conservadora recomendada).
-    """
-    max_c = PLANES[CUENTA]['max_contratos']
-
-    KZ_HORA_INICIO = 7
-    KZ_HORA_FIN    = 12
-    KZ_SWING_BARS  = 3
-    KZ_SL_MULT     = 1.0
-    KZ_TP_MULT     = 2.0
-
-    adx_ayer = calcular_adx_ayer(df_completo)
-    if adx_ayer > 0 and adx_ayer < ADX_MIN:
-        return None
-
-    vwap_vals = calcular_vwap(df_completo)
-    closes    = df_completo['Close'].values
-    highs     = df_completo['High'].values
-    lows      = df_completo['Low'].values
-    fechas    = df_completo.index
-    n_total   = len(fechas)
-
-    indices_kz = [
-        i for i, ts in enumerate(fechas)
-        if ts.astimezone(ET).date() == fecha_hoy
-        and KZ_HORA_INICIO <= ts.astimezone(ET).hour < KZ_HORA_FIN
-    ]
-    if len(indices_kz) < KZ_SWING_BARS + 1:
-        return None
-
-    indices_dia = [
-        i for i, ts in enumerate(fechas)
-        if ts.astimezone(ET).date() == fecha_hoy
-        and ts.astimezone(ET).hour >= KZ_HORA_INICIO
-        and not (ts.astimezone(ET).hour > CIERRE_HORA or
-                 (ts.astimezone(ET).hour == CIERRE_HORA and
-                  ts.astimezone(ET).minute >= CIERRE_MIN))
-    ]
-
-    for i in indices_kz:
-        if i < KZ_SWING_BARS:
-            continue
-
-        swing_high  = float(np.max(highs[i - KZ_SWING_BARS:i]))
-        swing_low   = float(np.min(lows[i - KZ_SWING_BARS:i]))
-        swing_range = swing_high - swing_low
-        if swing_range <= 0:
-            continue
-
-        close_i = closes[i]
-        vwap_i  = vwap_vals[i]
-
-        if close_i > swing_high and close_i > vwap_i:
-            direccion = 'LONG'
-            entrada   = swing_high
-            sl        = entrada - KZ_SL_MULT * swing_range
-            tp        = entrada + KZ_TP_MULT * swing_range
-        elif close_i < swing_low and close_i < vwap_i:
-            direccion = 'SHORT'
-            entrada   = swing_low
-            sl        = entrada + KZ_SL_MULT * swing_range
-            tp        = entrada - KZ_TP_MULT * swing_range
-        else:
-            continue
-
-        riesgo_puntos = abs(entrada - sl)
-        if riesgo_puntos <= 0:
-            continue
-        contratos = min(max(1, int(capital * riesgo_pct / (riesgo_puntos * MULT))), max_c)
-
-        resto = [j for j in indices_dia if j > i]
-        resultado, precio_salida = _simular_salida(
-            direccion, resto, highs, lows, closes, sl, tp, n_total
-        )
-        puntos, ganancia = _calcular_trade(
-            capital, entrada, sl, direccion, resultado, precio_salida, contratos
-        )
-
-        return {
-            'estrategia': 'KZ',
-            'direccion':  direccion,
-            'entrada':    round(entrada, 2),
-            'sl':         round(sl, 2),
-            'tp':         round(tp, 2),
-            'salida':     round(precio_salida, 2),
-            'resultado':  resultado,
-            'contratos':  contratos,
-            'puntos':     puntos,
-            'ganancia':   ganancia,
-            'swing_range': round(swing_range, 2),
-            'adx':        round(adx_ayer, 1),
-        }
-
-    return None
-
-
 def signal_actividad_minima(df_completo, fecha_hoy):
     """
     Genera una entrada mínima de 1 contrato para mantener la cuenta activa.
     Solo se llama si pasaron >= 28 días sin ningún trade (caso extremo).
-    Saltea todos los filtros. Entra LONG al precio actual con SL/TP de 4 puntos.
+    Saltea todos los filtros excepto el sesgo direccional por EMA.
     """
     fechas = df_completo.index
     closes = df_completo['Close'].values
-
     indices_hoy = [i for i, ts in enumerate(fechas)
                    if ts.astimezone(ET).date() == fecha_hoy
                    and ts.astimezone(ET).hour >= ORB_HORA_INICIO
                    and not (ts.astimezone(ET).hour > CIERRE_HORA or
                             (ts.astimezone(ET).hour == CIERRE_HORA and
                              ts.astimezone(ET).minute >= CIERRE_MIN))]
-
     if not indices_hoy:
         return None
-
     i_last  = indices_hoy[-1]
     entrada = round(closes[i_last], 2)
+
+    # Sesgo direccional por EMA diaria
+    ema_ayer, close_ayer = calcular_ema_diaria(df_completo)
+    if ema_ayer is not None and close_ayer < ema_ayer:
+        direccion = 'SHORT'
+        sl        = round(entrada + 4.0, 2)
+        tp        = round(entrada - 4.0, 2)
+    else:
+        direccion = 'LONG'
+        sl        = round(entrada - 4.0, 2)
+        tp        = round(entrada + 4.0, 2)
+
     return {
         'estrategia':   'ORB',
-        'direccion':    'LONG',
+        'direccion':    direccion,
         'entrada':      entrada,
-        'sl':           round(entrada - 4.0, 2),
-        'tp':           round(entrada + 4.0, 2),
+        'sl':           sl,
+        'tp':           tp,
         'contratos':    1,
         'orb_size':     0,
         'adx':          0,

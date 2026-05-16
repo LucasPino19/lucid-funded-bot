@@ -1,260 +1,273 @@
 """
-Backtest 8 meses (Sep 13, 2025 – May 9, 2026) — filtro horario de noticias.
-Solo se saltea el día si el evento cae dentro de la ventana de ejecución ORB (8am-1:30pm ET).
-Eventos a las 2pm (FOMC) quedan fuera → NO se filtran.
+Backtest noticias — con vs sin filtro de noticias — LucidFlex 25K
+=================================================================
+Verifica si operar en dias de noticias alto impacto (NFP, FOMC, CPI, etc.)
+mejora o empeora el rendimiento vs saltear esos dias.
+  A — con filtro (actual): skip dias con noticias
+  B — sin filtro:          opera igual en dias con noticias
+  C — size reducido:       opera en noticias con 1 contrato forzado (ambos trades)
 """
 
-import yfinance as yf
+import random
 import numpy as np
-from datetime import date
+import pandas as pd
+import yfinance as yf
 from zoneinfo import ZoneInfo
-from config import PLANES, CUENTA
 
-from estrategias import signal_orb, signal_ict
+from config import (PLANES, CUENTA, MULT, RIESGO_PCT, COSTO_CONTRATO,
+                    ORB_STOP_MULT, ORB_TARGET_MULT, ORB_VOLT_FILTRO,
+                    ORB_HORA_INICIO, ORB_VENTANA_H, ORB_VENTANA_M,
+                    CIERRE_HORA, CIERRE_MIN, ADX_MIN)
+from estrategias import calcular_adx_ayer, calcular_vwap, _calcular_trade
+from filtro_noticias import check_noticia
 
-ET = ZoneInfo("America/New_York")
-
-# ── Calendario de eventos de alto impacto con horario ET ─────────────────
-# Formato: (fecha, hora_ET, minuto_ET, nombre)
-EVENTOS = [
-    # NFP — primer viernes de cada mes, 8:30am ET
-    (date(2025,  9,  5),  8, 30, 'NFP'),
-    (date(2025, 10,  3),  8, 30, 'NFP'),
-    (date(2025, 11,  7),  8, 30, 'NFP'),
-    (date(2025, 12,  5),  8, 30, 'NFP'),
-    (date(2026,  1,  9),  8, 30, 'NFP'),
-    (date(2026,  2,  6),  8, 30, 'NFP'),
-    (date(2026,  3,  6),  8, 30, 'NFP'),
-    (date(2026,  4,  3),  8, 30, 'NFP'),
-    (date(2026,  5,  1),  8, 30, 'NFP'),
-    # CPI — 8:30am ET
-    (date(2025,  9, 10),  8, 30, 'CPI'),
-    (date(2025, 10, 15),  8, 30, 'CPI'),
-    (date(2025, 11, 12),  8, 30, 'CPI'),
-    (date(2025, 12, 10),  8, 30, 'CPI'),
-    (date(2026,  1, 15),  8, 30, 'CPI'),
-    (date(2026,  2, 12),  8, 30, 'CPI'),
-    (date(2026,  3, 12),  8, 30, 'CPI'),
-    (date(2026,  4, 10),  8, 30, 'CPI'),
-    # PPI — 8:30am ET (día siguiente al CPI)
-    (date(2025,  9, 11),  8, 30, 'PPI'),
-    (date(2025, 10, 16),  8, 30, 'PPI'),
-    (date(2025, 11, 13),  8, 30, 'PPI'),
-    (date(2025, 12, 11),  8, 30, 'PPI'),
-    (date(2026,  1, 16),  8, 30, 'PPI'),
-    (date(2026,  2, 13),  8, 30, 'PPI'),
-    (date(2026,  3, 13),  8, 30, 'PPI'),
-    (date(2026,  4, 11),  8, 30, 'PPI'),
-    # FOMC decisión — 2:00pm ET (DESPUÉS del cierre de ventana ORB 1:30pm → NO se filtra)
-    (date(2025,  9, 17), 14,  0, 'FOMC'),
-    (date(2025, 10, 29), 14,  0, 'FOMC'),
-    (date(2025, 12, 10), 14,  0, 'FOMC'),
-    (date(2026,  1, 28), 14,  0, 'FOMC'),
-    (date(2026,  3, 19), 14,  0, 'FOMC'),
-    (date(2026,  5,  7), 14,  0, 'FOMC'),
-]
-
-# Ventana de filtro: 8:00am – 1:30pm ET
-# Eventos dentro de este rango → saltear el día
-FILTRO_INICIO_MIN = 8 * 60        # 480 min = 8:00am
-FILTRO_FIN_MIN    = 13 * 60 + 30  # 810 min = 1:30pm
+ET        = ZoneInfo("America/New_York")
+CAPITAL_0 = float(PLANES[CUENTA]['capital_inicial'])
+TARGET    = PLANES[CUENTA]['profit_target']
+DRAWDOWN  = PLANES[CUENTA]['max_drawdown']
+ITB       = CAPITAL_0 + DRAWDOWN   # $26,000: trigger lock MLL
+MLL_FIJO  = CAPITAL_0              # $25,000: MLL congelado
+MAX_C     = PLANES[CUENTA]['max_contratos']
+N_EVALS   = 50
+WARMUP    = 30
+MAX_CONSEC_PERDIDAS = 2
 
 
-def check_noticia(fecha: date):
-    """Devuelve (True, nombre_evento) si hay evento dentro de la ventana ORB, sino (False, None)."""
-    for ev_fecha, ev_h, ev_m, ev_nombre in EVENTOS:
-        if ev_fecha == fecha:
-            ev_mins = ev_h * 60 + ev_m
-            if FILTRO_INICIO_MIN <= ev_mins <= FILTRO_FIN_MIN:
-                return True, ev_nombre
-    return False, None
-
-
-def correr_backtest(df, fecha_inicio, fecha_fin, usar_filtro, nombre_run):
-    capital   = float(PLANES[CUENTA]['capital_inicial'])
-    target    = PLANES[CUENTA]['profit_target']
-    drawdown  = PLANES[CUENTA]['max_drawdown']
-    capital_0 = capital
-
-    st_orb = {'orb_sizes': [], 'trades': 0, 'take_profit': 0, 'stop_loss': 0, 'timeout': 0, 'skip': 0}
-    st_ict = {'obs_usados': set(), 'trades': 0, 'take_profit': 0, 'stop_loss': 0, 'timeout': 0, 'skip': 0}
-
-    fechas_dias = sorted({
-        ts.astimezone(ET).date()
-        for ts in df.index
-        if fecha_inicio <= ts.astimezone(ET).date() <= fecha_fin
-        and ts.astimezone(ET).weekday() < 5
-    })
-
-    log_orb = []
-    log_ict = []
-
-    # ── ORB ─────────────────────────────────────────────────────────────
-    capital_orb = float(PLANES[CUENTA]['capital_inicial'])
-    for hoy in fechas_dias:
-        df_corte = df[[ts.astimezone(ET).date() <= hoy for ts in df.index]]
-        if len(df_corte) < 50:
-            continue
-
-        hay_noticia, nombre_ev = check_noticia(hoy) if usar_filtro else (False, None)
-        if hay_noticia:
-            st_orb['skip'] += 1
-            log_orb.append((hoy, 'SKIP', '-', '-', '-', 0, '$0', 'noticia: %s 8:30am' % nombre_ev))
-            continue
-
-        # ¿FOMC hoy? (2pm ET, fuera de ventana) → marcar para contexto pero no saltear
-        es_fomc = any(ev[0] == hoy and ev[3] == 'FOMC' for ev in EVENTOS)
-        fomc_tag = ' [FOMC 2pm]' if (usar_filtro and es_fomc) else ''
-
-        trade, sizes, motivo = signal_orb(df_corte, hoy, capital_orb, st_orb['orb_sizes'])
-        st_orb['orb_sizes'] = sizes
-        if trade:
-            st_orb['trades'] += 1
-            st_orb[trade['resultado']] += 1
-            capital_orb += trade['ganancia']
-            log_orb.append((
-                hoy,
-                trade['direccion'] + fomc_tag,
-                trade['entrada'],
-                trade['sl'],
-                trade['tp'],
-                trade['contratos'],
-                '$%+.0f' % trade['ganancia'],
-                trade['resultado'],
-            ))
+def _simular_salida(direccion, indices_resto, highs, lows, closes, sl, tp, n_total):
+    if not indices_resto:
+        return 'timeout', closes[n_total - 1]
+    for m in indices_resto:
+        if direccion == 'LONG':
+            if lows[m] <= sl:
+                return 'stop_loss', sl
+            if highs[m] >= tp:
+                return 'take_profit', tp
         else:
-            log_orb.append((hoy, 'Sin señal', '-', '-', '-', 0, '$0', (motivo or '') + fomc_tag))
+            if highs[m] >= sl:
+                return 'stop_loss', sl
+            if lows[m] <= tp:
+                return 'take_profit', tp
+    return 'timeout', closes[indices_resto[-1]]
 
-        if capital_orb - capital_0 <= -drawdown:
-            log_orb.append((hoy, '***', '-', '-', '-', 0, '$0', 'DRAWDOWN MAX — funded perdida'))
-            break
-        if capital_orb - capital_0 >= target:
-            log_orb.append((hoy, '***', '-', '-', '-', 0, '$0', 'PROFIT TARGET — funded pasada!'))
+
+def orb_trades_dia(df_c, hoy, capital, orb_sizes, force_size=None):
+    """
+    force_size=None  → sizing normal por riesgo
+    force_size=1     → fuerza 1 contrato en todos los trades (modo noticias reducido)
+    """
+    adx_ayer = calcular_adx_ayer(df_c)
+    if 0 < adx_ayer < ADX_MIN:
+        return [], orb_sizes
+
+    vwap_vals = calcular_vwap(df_c)
+    closes    = df_c['Close'].values
+    highs     = df_c['High'].values
+    lows      = df_c['Low'].values
+    fechas    = df_c.index
+
+    indices_hoy = [i for i, ts in enumerate(fechas)
+                   if ts.astimezone(ET).date() == hoy]
+    if len(indices_hoy) < 3:
+        return [], orb_sizes
+
+    i0 = next((i for i in indices_hoy
+               if fechas[i].astimezone(ET).hour >= ORB_HORA_INICIO), None)
+    if i0 is None:
+        return [], orb_sizes
+
+    orb_high = highs[i0]
+    orb_low  = lows[i0]
+    orb_size = orb_high - orb_low
+    if orb_size <= 0:
+        return [], orb_sizes
+
+    sizes_nuevos = orb_sizes.copy()
+    if len(orb_sizes) >= 5:
+        promedio = np.mean(orb_sizes[-10:])
+        if orb_size > promedio * ORB_VOLT_FILTRO:
+            sizes_nuevos.append(orb_size)
+            return [], sizes_nuevos
+    sizes_nuevos.append(orb_size)
+
+    stop_dist   = orb_size * ORB_STOP_MULT
+    target_dist = orb_size * ORB_TARGET_MULT
+
+    indices_post_orb = [i for i in indices_hoy if i > i0]
+    trades         = []
+    min_idx        = 0
+    capital_actual = capital
+
+    for trade_num in range(1, 3):
+        for k, i in enumerate(indices_post_orb):
+            if i < min_idx:
+                continue
+            hora_et = fechas[i].astimezone(ET)
+            if hora_et.hour > CIERRE_HORA or (hora_et.hour == CIERRE_HORA and hora_et.minute >= CIERRE_MIN):
+                break
+            if hora_et.hour > ORB_VENTANA_H or (hora_et.hour == ORB_VENTANA_H and hora_et.minute >= ORB_VENTANA_M):
+                break
+
+            precio  = closes[i]
+            vwap_i  = vwap_vals[i]
+            entrada = None
+
+            if closes[i] > orb_high and precio > vwap_i:
+                entrada   = orb_high
+                sl        = entrada - stop_dist
+                tp        = entrada + target_dist
+                direccion = 'LONG'
+            elif closes[i] < orb_low and precio < vwap_i:
+                entrada   = orb_low
+                sl        = entrada + stop_dist
+                tp        = entrada - target_dist
+                direccion = 'SHORT'
+
+            if entrada is None:
+                continue
+
+            if force_size is not None:
+                contratos = force_size
+            else:
+                riesgo_usd      = capital_actual * RIESGO_PCT
+                riesgo_puntos   = abs(entrada - sl)
+                riesgo_contrato = riesgo_puntos * MULT
+                if riesgo_contrato == 0:
+                    continue
+                if riesgo_contrato > riesgo_usd:
+                    if trade_num == 2:
+                        contratos = 1
+                    else:
+                        continue
+                else:
+                    contratos = min(max(1, int(riesgo_usd / riesgo_contrato)), MAX_C)
+
+            resto = [j for j in indices_post_orb[k+1:]
+                     if not (fechas[j].astimezone(ET).hour > CIERRE_HORA or
+                             (fechas[j].astimezone(ET).hour == CIERRE_HORA and
+                              fechas[j].astimezone(ET).minute >= CIERRE_MIN))]
+
+            resultado, precio_salida = _simular_salida(
+                direccion, resto, highs, lows, closes, sl, tp, len(closes))
+            puntos, ganancia = _calcular_trade(
+                capital_actual, entrada, sl, direccion, resultado, precio_salida, contratos)
+
+            trades.append({
+                'resultado':  resultado,
+                'ganancia':   ganancia,
+                'trade_num':  trade_num,
+                'es_noticia': True,
+            })
+            capital_actual += ganancia
+            min_idx = i + 1
             break
 
-    # ── ICT ─────────────────────────────────────────────────────────────
-    capital_ict = float(PLANES[CUENTA]['capital_inicial'])
-    for hoy in fechas_dias:
-        df_corte = df[[ts.astimezone(ET).date() <= hoy for ts in df.index]]
-        if len(df_corte) < 50:
+    return trades, sizes_nuevos
+
+
+def simular_eval(dias, start, modo='con_filtro'):
+    capital      = CAPITAL_0
+    peak         = CAPITAL_0
+    orb_sizes    = []
+    consecutivas = 0
+    trades_eval  = []
+
+    for hoy in [d for d in dias if d >= start]:
+        hay_noticia, _ = check_noticia(hoy)
+
+        if hay_noticia and modo == 'con_filtro':
+            continue
+        if consecutivas >= MAX_CONSEC_PERDIDAS:
+            consecutivas = 0
+
+        df_c = df_global[df_global.index.tz_convert(ET).date <= hoy]
+        if len(df_c) < 50:
             continue
 
-        hay_noticia, nombre_ev = check_noticia(hoy) if usar_filtro else (False, None)
-        if hay_noticia:
-            st_ict['skip'] += 1
-            log_ict.append((hoy, 'SKIP', '-', '-', '-', 0, '$0', 'noticia: %s 8:30am' % nombre_ev))
-            continue
+        force_size = 1 if (hay_noticia and modo == 'size_reducido') else None
 
-        es_fomc = any(ev[0] == hoy and ev[3] == 'FOMC' for ev in EVENTOS)
-        fomc_tag = ' [FOMC 2pm]' if (usar_filtro and es_fomc) else ''
+        trades_dia, orb_sizes = orb_trades_dia(df_c, hoy, capital, orb_sizes, force_size)
 
-        trade, obs, motivo = signal_ict(df_corte, hoy, capital_ict, st_ict['obs_usados'])
-        st_ict['obs_usados'] = obs
-        if trade:
-            st_ict['trades'] += 1
-            st_ict[trade['resultado']] += 1
-            capital_ict += trade['ganancia']
-            log_ict.append((
-                hoy,
-                trade['direccion'] + fomc_tag,
-                trade['entrada'],
-                trade['sl'],
-                trade['tp'],
-                trade['contratos'],
-                '$%+.0f' % trade['ganancia'],
-                trade['resultado'],
-            ))
-        else:
-            log_ict.append((hoy, 'Sin señal', '-', '-', '-', 0, '$0', (motivo or '') + fomc_tag))
+        for t in trades_dia:
+            if consecutivas >= MAX_CONSEC_PERDIDAS:
+                break
+            capital += t['ganancia']
+            trades_eval.append(t)
+            if t['resultado'] == 'stop_loss':
+                consecutivas += 1
+            else:
+                consecutivas = 0
 
-        if capital_ict - capital_0 <= -drawdown:
-            log_ict.append((hoy, '***', '-', '-', '-', 0, '$0', 'DRAWDOWN MAX — funded perdida'))
-            break
+        peak   = max(peak, capital)
+        limite = MLL_FIJO if peak >= ITB else peak - DRAWDOWN
 
-    # ── Imprimir ─────────────────────────────────────────────────────────
-    filtro_label = 'CON FILTRO HORARIO (NFP/CPI/PPI 8:30am — FOMC 2pm NO filtrado)' if usar_filtro else 'SIN FILTRO'
-    print('\n' + '=' * 78)
-    print('  %s  —  %s' % (nombre_run, filtro_label))
-    print('=' * 78)
+        if capital - CAPITAL_0 >= TARGET:
+            return 'PASADA', hoy, capital, trades_eval
+        if capital <= limite:
+            return 'EXPLOTADA', hoy, capital, trades_eval
 
-    col = '  %-12s  %-22s  %-8s  %-8s  %-8s  %4s  %8s  %s'
-    sep = '  ' + '-' * 76
-    hdr = col % ('Dia', 'Dir', 'Entrada', 'SL', 'TP', 'Ctrs', 'P&L', 'Resultado')
-
-    print('\n  ORB — detalle:')
-    print(hdr); print(sep)
-    for r in log_orb:
-        print(col % r)
-
-    orb_pnl = capital_orb - capital_0
-    print('\n  ORB → Trades: %d | TP: %d | SL: %d | Timeout: %d | Skip noticias: %d | P&L: $%+.0f' % (
-        st_orb['trades'], st_orb['take_profit'], st_orb['stop_loss'],
-        st_orb['timeout'], st_orb['skip'], orb_pnl))
-
-    print('\n  ICT — detalle:')
-    print(hdr); print(sep)
-    for r in log_ict:
-        print(col % r)
-
-    ict_pnl = capital_ict - capital_0
-    print('\n  ICT → Trades: %d | TP: %d | SL: %d | Timeout: %d | Skip noticias: %d | P&L: $%+.0f' % (
-        st_ict['trades'], st_ict['take_profit'], st_ict['stop_loss'],
-        st_ict['timeout'], st_ict['skip'], ict_pnl))
-
-    print('=' * 78)
-    return orb_pnl, ict_pnl
+    return 'INCOMPLETA', hoy, capital, trades_eval
 
 
-# ── Main ─────────────────────────────────────────────────────────────────────
+def resumen(nombre, resultados):
+    pasadas    = [r for r in resultados if r['resultado'] == 'PASADA']
+    explotadas = [r for r in resultados if r['resultado'] == 'EXPLOTADA']
+    todos      = [t for r in resultados for t in r['trades']]
+    wins       = sum(1 for t in todos if t['resultado'] == 'take_profit')
+    noticias   = [t for t in todos if t.get('es_noticia')]
+
+    print('\n%s' % nombre)
+    print('-' * 60)
+    print('  Pasadas:              %d/%d (%.0f%%)' % (len(pasadas), N_EVALS, len(pasadas) / N_EVALS * 100))
+    print('  Explotadas:           %d/%d (%.0f%%)' % (len(explotadas), N_EVALS, len(explotadas) / N_EVALS * 100))
+    if pasadas:
+        print('  Dias prom para pasar: %.0f' % np.mean([(r['fin'] - r['start']).days for r in pasadas]))
+        print('  Trades prom/eval:     %.1f' % np.mean([len(r['trades']) for r in pasadas]))
+    if todos:
+        print('  Win rate total:       %.0f%% (%d/%d)' % (wins / len(todos) * 100, wins, len(todos)))
+        print('  P&L prom por trade:   $%+.0f' % np.mean([t['ganancia'] for t in todos]))
+    if noticias:
+        n_wins = sum(1 for t in noticias if t['resultado'] == 'take_profit')
+        print('  Trades en noticias:   %d | WR %.0f%% | P&L prom $%+.0f' % (
+            len(noticias), n_wins / len(noticias) * 100,
+            np.mean([t['ganancia'] for t in noticias])))
+
+
 if __name__ == '__main__':
-    print('Descargando datos MES=F (1h, desde jul 2025 para warmup)...')
-    import pandas as pd
-    df = yf.download('MES=F', start='2025-07-01', end='2026-05-14',
-                     interval='1h', progress=False, auto_adjust=True)
-    if df.empty:
+    print('Descargando MES=F (2 años, 1h)...')
+    raw = yf.download('MES=F', period='730d', interval='1h',
+                      progress=False, auto_adjust=True)
+    if raw.empty:
         raise SystemExit('Error: no se pudo descargar MES=F')
+    if isinstance(raw.columns, pd.MultiIndex):
+        raw.columns = raw.columns.droplevel(1)
+    raw.index = (raw.index.tz_convert(ET) if raw.index.tzinfo
+                 else raw.index.tz_localize('UTC').tz_convert(ET))
+    df_global = raw.dropna()
 
-    if isinstance(df.columns, pd.MultiIndex):
-        df.columns = df.columns.droplevel(1)
+    dias = sorted({ts.astimezone(ET).date() for ts in df_global.index
+                   if ts.astimezone(ET).weekday() < 5})
+    print('Datos: %s → %s (%d dias)\n' % (dias[0], dias[-1], len(dias)))
 
-    df.index = (df.index.tz_convert(ET) if df.index.tzinfo
-                else df.index.tz_localize('UTC').tz_convert(ET))
+    dias_con_noticia = sum(1 for d in dias if check_noticia(d)[0])
+    print('Dias con noticias alto impacto: %d/%d (%.0f%%)\n' % (
+        dias_con_noticia, len(dias), dias_con_noticia / len(dias) * 100))
 
-    inicio = date(2025, 9, 13)
-    fin    = date(2026, 5,  9)
+    random.seed(2025)
+    dias_utiles = dias[WARMUP:-60]
+    starts      = sorted(random.sample(dias_utiles, N_EVALS))
 
-    orb_sin, ict_sin = correr_backtest(df, inicio, fin,
-                                       usar_filtro=False,
-                                       nombre_run='Sep 13, 2025 – May 9, 2026')
+    for modo, nombre in [
+        ('con_filtro',    'A — Con filtro de noticias (actual)'),
+        ('sin_filtro',    'B — Sin filtro (opera en dias de noticias)'),
+        ('size_reducido', 'C — Size reducido en noticias (1 contrato)'),
+    ]:
+        resultados = []
+        for start in starts:
+            res, fin, cap, trades = simular_eval(dias, start, modo=modo)
+            resultados.append({
+                'resultado': res, 'start': start, 'fin': fin,
+                'capital': cap, 'trades': trades,
+            })
+        resumen(nombre, resultados)
 
-    orb_con, ict_con = correr_backtest(df, inicio, fin,
-                                       usar_filtro=True,
-                                       nombre_run='Sep 13, 2025 – May 9, 2026')
-
-    # ── Resumen final ─────────────────────────────────────────────────────
-    dias_filtrados = sorted(
-        ev[0] for ev in EVENTOS
-        if inicio <= ev[0] <= fin
-        and FILTRO_INICIO_MIN <= ev[1] * 60 + ev[2] <= FILTRO_FIN_MIN
-    )
-    fomc_no_filtrado = sorted(
-        ev[0] for ev in EVENTOS
-        if inicio <= ev[0] <= fin and ev[3] == 'FOMC'
-    )
-
-    print('\n' + '=' * 78)
-    print('  RESUMEN COMPARATIVO — 8 MESES')
-    print('  ' + '-' * 76)
-    print('  %-35s  %18s  %18s' % ('', 'SIN FILTRO', 'CON FILTRO'))
-    print('  %-35s  %18s  %18s' % ('ORB P&L', '$%+.0f' % orb_sin, '$%+.0f' % orb_con))
-    print('  %-35s  %18s  %18s' % ('ICT P&L', '$%+.0f' % ict_sin, '$%+.0f' % ict_con))
     print()
-    print('  Días FILTRADOS (evento 8:30am ET dentro de ventana ORB):')
-    for d in dias_filtrados:
-        nombres = [ev[3] for ev in EVENTOS if ev[0] == d and FILTRO_INICIO_MIN <= ev[1]*60+ev[2] <= FILTRO_FIN_MIN]
-        print('    ✗  %s — %s' % (d, ', '.join(nombres)))
-    print()
-    print('  Días con FOMC (2pm ET) — NO filtrados, bot puede operar:')
-    for d in fomc_no_filtrado:
-        print('    ✓  %s — FOMC 2pm (fuera de ventana ORB)' % d)
-    print('=' * 78)
