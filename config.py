@@ -36,8 +36,8 @@ ORB_TARGET_MULT = 1.5   # target = 1.5x el rango ORB
 ORB_VOLT_FILTRO = 1.5   # skip si ORB > 1.5x promedio 10 días
 ORB_HORA_INICIO = 9     # primera vela de sesión regular (9:30 ET)
 ORB_MIN_INICIO  = 30
-ORB_VENTANA_H   = 13    # solo entrar antes de la 1:30pm ET
-ORB_VENTANA_M   = 30
+ORB_VENTANA_H   = 15    # solo entrar antes de las 3:00pm ET (variante B — backtest 500 evals)
+ORB_VENTANA_M   = 0
 ADX_MIN         = 20    # mercado en tendencia si ADX > 20
 
 # ── ICT Kill Zones — VALIDADO PARA 50k, NO ACTIVAR EN 25k ──
