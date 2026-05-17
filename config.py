@@ -27,7 +27,10 @@ TICKER = 'MES=F'   # Micro E-mini S&P 500 (yfinance)
 MULT   = 5         # 1 punto MES = $5
 
 # ── Riesgo por trade ──
-RIESGO_PCT     = 0.01   # 1% del capital
+RIESGO_PCT     = 0.01   # 1% del capital — eval
+# FUNDED: cambiar a 0.0075 (0.75%) cuando pase a funded.
+# Backtest 50 sims × 12m: 0% blowup vs 10% con 1%. Income mediano $500/mes vs $735.
+# Tradeoff aceptado: menos plata, cero riesgo de explotar antes del primer pago.
 COSTO_CONTRATO = 4      # slippage $2.50 + comisión $1.50
 
 # ── ORB + VWAP ──

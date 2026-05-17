@@ -219,7 +219,7 @@ def signal_orb_entry(df_completo, fecha_hoy, capital, orb_sizes_hist, force_cont
     hora_et = fechas[i].astimezone(ET)
 
     if hora_et.hour > ORB_VENTANA_H or (hora_et.hour == ORB_VENTANA_H and hora_et.minute >= ORB_VENTANA_M):
-        return None, sizes_nuevos, 'Fuera de ventana ORB (1:30pm ET)'
+        return None, sizes_nuevos, 'Fuera de ventana ORB (%02d:%02d ET)' % (ORB_VENTANA_H, ORB_VENTANA_M)
     if hora_et.hour > CIERRE_HORA or (hora_et.hour == CIERRE_HORA and hora_et.minute >= CIERRE_MIN):
         return None, sizes_nuevos, 'Mercado cerrado'
 

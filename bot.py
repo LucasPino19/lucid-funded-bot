@@ -331,16 +331,38 @@ def main():
             local_pos = estado['ORB_LIVE'].get('posicion_abierta')
 
             if qty_real > 0 and not local_pos:
-                print('[BOT] ALERTA: Rithmic tiene posicion no registrada (%s x%d) — bloqueando entradas hoy.' % (
+                # Rithmic tiene una posicion que el estado local desconoce.
+                # No sabemos su SL/TP (puede ser un bracket huerfano sin gestion) — la cerramos
+                # de inmediato y bloqueamos entradas hoy para no operar en estado inconsistente.
+                print('[BOT] ALERTA: Rithmic tiene posicion no registrada (%s x%d) — cerrando ahora.' % (
                     dir_real, qty_real))
+                try:
+                    ok_close = flatten_position(qty_real, dir_real)
+                    if ok_close:
+                        print('[BOT] Posicion desconocida cerrada — bloqueando entradas hoy por seguridad.')
+                    else:
+                        print('[BOT] FATAL: no se pudo cerrar posicion desconocida — revisar manualmente en Rithmic.')
+                except Exception as _e_close:
+                    print('[BOT] Error al intentar cerrar posicion desconocida: %s' % _e_close)
                 estado['ORB_LIVE']['ya_opero_hoy']        = dia_str
                 estado['ORB_LIVE']['entradas_bloqueadas'] = dia_str
             elif qty_real > 0 and local_pos:
                 if (local_pos.get('direccion') != dir_real or
                         local_pos.get('contratos') != qty_real):
-                    print('[BOT] ALERTA: desincronizado — local %s x%d vs Rithmic %s x%d' % (
+                    # Local y Rithmic no coinciden en direccion/cantidad — estado ambiguo.
+                    # Cerramos la posicion remota (la "real") para evitar exposicion sin gestion correcta.
+                    print('[BOT] ALERTA: desincronizado — local %s x%d vs Rithmic %s x%d — cerrando posicion remota.' % (
                         local_pos.get('direccion'), local_pos.get('contratos'),
                         dir_real, qty_real))
+                    try:
+                        ok_close = flatten_position(qty_real, dir_real)
+                        if ok_close:
+                            estado['ORB_LIVE']['posicion_abierta'] = None
+                            print('[BOT] Cierre de desincronizada confirmado — estado local limpiado.')
+                        else:
+                            print('[BOT] FATAL: no se pudo cerrar posicion desincronizada.')
+                    except Exception as _e_close:
+                        print('[BOT] Error al intentar cerrar posicion desincronizada: %s' % _e_close)
                     estado['ORB_LIVE']['entradas_bloqueadas'] = dia_str
             elif qty_real == 0 and local_pos:
                 print('[BOT] ALERTA: posicion local existe pero Rithmic flat — limpiando local.')

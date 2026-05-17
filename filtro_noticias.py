@@ -1,9 +1,15 @@
 """
 Filtro de noticias de alto impacto — calendario hardcodeado.
-Solo bloquea si el evento cae dentro de la ventana ORB (8am-1:30pm ET).
-FOMC (2pm ET) no se filtra — el bot ya cerro su ventana a la 1:30pm.
+Bloquea el dia entero si el evento esta en el calendario.
 
-Para actualizar: mandame las fechas del nuevo año y lo actualizo en minutos.
+VENTANA DE ENTRADA ACTUAL: 9:30am - 3:00pm ET (ORB_VENTANA_H=15 en config.py).
+=> FOMC (anuncio 2pm ET) SI cae dentro de la ventana — deberia agregarse al
+   calendario abajo para evitar entradas justo antes/durante el anuncio.
+   TODO: agregar fechas FOMC 2025-2026 (federalreserve.gov/monetarypolicy/fomccalendars.htm).
+
+Si el calendario expira (fecha > _ULTIMA_FECHA), por defecto se bloquea el dia
+para evitar operar sin filtro de noticias.
+
 Fuentes: bls.gov/schedule (NFP/CPI/PPI) y federalreserve.gov (FOMC).
 """
 
@@ -45,6 +51,11 @@ _ULTIMA_FECHA = max(_CALENDARIO.keys())
 
 
 def check_noticia(fecha: date) -> tuple:
+    if fecha > _ULTIMA_FECHA:
+        # Fail-safe: si el calendario expiro, bloqueamos por defecto para no operar
+        # sin filtro de noticias. Hay que actualizar _CALENDARIO con fechas nuevas.
+        print('[FILTRO_NOTICIAS] ALERTA: calendario expiro el %s — bloqueando entradas por seguridad.' % _ULTIMA_FECHA)
+        return True, 'CALENDARIO_EXPIRADO'
     if fecha > _ULTIMA_FECHA - timedelta(days=30):
         print('[FILTRO_NOTICIAS] WARNING: calendario expira el %s — actualizar pronto.' % _ULTIMA_FECHA)
     nombre = _CALENDARIO.get(fecha)
