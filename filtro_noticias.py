@@ -3,9 +3,7 @@ Filtro de noticias de alto impacto — calendario hardcodeado.
 Bloquea el dia entero si el evento esta en el calendario.
 
 VENTANA DE ENTRADA ACTUAL: 9:30am - 3:00pm ET (ORB_VENTANA_H=15 en config.py).
-=> FOMC (anuncio 2pm ET) SI cae dentro de la ventana — deberia agregarse al
-   calendario abajo para evitar entradas justo antes/durante el anuncio.
-   TODO: agregar fechas FOMC 2025-2026 (federalreserve.gov/monetarypolicy/fomccalendars.htm).
+FOMC anuncia a las 2pm ET — cae dentro de la ventana — se bloquea el dia entero.
 
 Si el calendario expira (fecha > _ULTIMA_FECHA), por defecto se bloquea el dia
 para evitar operar sin filtro de noticias.
@@ -17,6 +15,16 @@ from datetime import date, timedelta
 
 
 _CALENDARIO = {
+    # FOMC — anuncio 2:00pm ET (dia 2 de cada reunion, tipicamente miercoles)
+    # Fuente: federalreserve.gov/monetarypolicy/fomccalendars.htm — verificar anualmente
+    date(2025,  1, 29): 'FOMC', date(2025,  3, 19): 'FOMC',
+    date(2025,  5,  7): 'FOMC', date(2025,  6, 18): 'FOMC',
+    date(2025,  7, 30): 'FOMC', date(2025,  9, 17): 'FOMC',
+    date(2025, 10, 29): 'FOMC', date(2025, 12, 10): 'FOMC',
+    date(2026,  1, 28): 'FOMC', date(2026,  3, 18): 'FOMC',
+    date(2026,  5,  6): 'FOMC', date(2026,  6, 17): 'FOMC',
+    date(2026,  7, 29): 'FOMC', date(2026,  9, 16): 'FOMC',
+    date(2026, 10, 28): 'FOMC', date(2026, 12,  9): 'FOMC',
     # NFP — primer viernes del mes, 8:30am ET
     date(2025,  9,  5): 'NFP', date(2025, 10,  3): 'NFP',
     date(2025, 11,  7): 'NFP', date(2025, 12,  5): 'NFP',
