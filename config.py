@@ -33,6 +33,13 @@ RIESGO_PCT     = 0.01   # 1% del capital — eval
 # Tradeoff aceptado: menos plata, cero riesgo de explotar antes del primer pago.
 COSTO_CONTRATO = 4      # slippage $2.50 + comisión $1.50
 
+# ── Estrategia de payouts (funded) ──────────────────────────────────────────
+# MLL NO resetea tras payout (confirmado proptradingvibes.com).
+# Retiro agresivo (todo el profit) → 24% blowup en 12m (backtest_payouts.py).
+# Estrategia correcta: retirar solo lo que supera PAYOUT_FLOOR.
+# Con floor $26,500 → 0% blowup, $410/mes income, $1,500 buffer permanente sobre MLL.
+PAYOUT_FLOOR = 26_500   # nunca retirar por debajo de este balance
+
 # ── ORB + VWAP ──
 ORB_STOP_MULT   = 1.5   # stop = 1.5x el rango ORB
 ORB_TARGET_MULT = 1.5   # target = 1.5x el rango ORB
