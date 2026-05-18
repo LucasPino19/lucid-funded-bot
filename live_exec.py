@@ -164,6 +164,9 @@ async def _flatten_async(qty, direccion):
         )
 
         # Verificar rp_code de la respuesta inmediata
+        # result_close=None significa timeout — la orden de cierre NO llegó a Rithmic
+        if result_close is None:
+            raise RuntimeError('submit_order de cierre devolvio None — orden NO enviada')
         resp_c = result_close[0] if (isinstance(result_close, list) and result_close) else result_close
         if resp_c is not None:
             rp_c = getattr(resp_c, 'rp_code', None)
