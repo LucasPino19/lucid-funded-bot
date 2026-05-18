@@ -76,6 +76,14 @@ async def _submit_bracket_async(entry_signal):
     )
 
     # Validar que Rithmic aceptó la orden (rp_code=['0'] = éxito)
+    # result=None significa timeout/sin respuesta — tratar como rechazo
+    if result is None:
+        print('[LIVE] ERROR: Rithmic devolvio None — orden NO enviada.')
+        try:
+            await client.disconnect()
+        except Exception:
+            pass
+        return None
     resp = result[0] if (isinstance(result, list) and result) else result
     if resp is not None:
         rp = getattr(resp, 'rp_code', None)

@@ -366,10 +366,12 @@ def main():
                     estado['ORB_LIVE']['entradas_bloqueadas'] = dia_str
             elif qty_real == 0 and local_pos:
                 # Rithmic flat pero estado local tiene posicion — el bracket cerro entre runs.
-                # NO limpiar aqui: dejar que gestionar_posicion lo detecte con datos de barra
-                # reales para calcular el P&L correctamente y actualizar el capital.
-                # Si no detecta cierre en la barra actual, force_eod lo forzara al EOD.
-                print('[BOT] ALERTA: posicion local existe pero Rithmic flat — se procesara via bar data.')
+                # Marcar para cerrar inmediatamente en el loop de estrategias con force_eod=True:
+                # el SL/TP real de Rithmic puede diferir del calculado (slippage en fill MKT),
+                # por lo que gestionar_posicion podria no detectarlo con bar data normal.
+                # force_eod garantiza el cierre y registro del P&L en este mismo run.
+                print('[BOT] ALERTA: posicion local existe pero Rithmic flat — cerrando localmente ahora.')
+                estado['ORB_LIVE']['_force_gestionar'] = True
         except Exception as _e:
             print('[BOT] No se pudo verificar posicion en Rithmic al inicio: %s' % _e)
 
@@ -415,6 +417,8 @@ def main():
 
     for estrategia in estrategias_activas:
         c = estado[estrategia]
+        # Pop temprano para que no se persista en estado.json aunque el loop salga por continue
+        _force_gestionar = estado[estrategia].pop('_force_gestionar', False)
 
         print('\n[%s] Estado: %s | Capital: $%.0f | Ganancia: $%+.0f' % (
             estrategia, c['estado'], c['capital'], c['ganancia_total']))
@@ -457,7 +461,7 @@ def main():
 
         # ── Gestionar posicion abierta ──
         if c.get('posicion_abierta'):
-            trade_cerrado = gestionar_posicion(c['posicion_abierta'], df_hasta_ahora, hoy, force_eod=es_eod)
+            trade_cerrado = gestionar_posicion(c['posicion_abierta'], df_hasta_ahora, hoy, force_eod=(es_eod or _force_gestionar))
             if trade_cerrado:
                 print('[%s] CERRADO: %s | %+.1f pts | $%+.0f' % (
                     estrategia, trade_cerrado['resultado'],
