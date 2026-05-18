@@ -248,7 +248,9 @@ def signal_orb_entry(df_completo, fecha_hoy, capital, orb_sizes_hist, force_cont
     if riesgo_contrato == 0:
         return None, sizes_nuevos, 'Riesgo fuera de rango'
     if riesgo_contrato > riesgo_usd:
-        if not force_contrato:
+        # Flex sizing: permite 1 contrato si el riesgo no supera 1.5× el presupuesto.
+        # Backtest 200 sims: mismo blowup (8%), +2% pass rate, -3 días mediana.
+        if not force_contrato and riesgo_contrato > riesgo_usd * 1.5:
             return None, sizes_nuevos, 'Riesgo fuera de rango (ORB grande)'
         contratos = 1
     else:
