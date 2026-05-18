@@ -115,7 +115,7 @@ async def _get_position_async():
         await client.disconnect()
     except Exception:
         pass
-    for pos in positions:
+    for pos in (positions or []):
         sym = getattr(pos, 'symbol', '')
         if sym != SYMBOL_LIVE:
             continue
@@ -178,7 +178,7 @@ async def _flatten_async(qty, direccion):
         # 3. VERIFICAR que la posicion realmente esta flat
         await asyncio.sleep(2)
         positions = await client.list_positions()
-        for pos in positions:
+        for pos in (positions or []):
             if getattr(pos, 'symbol', '') != SYMBOL_LIVE:
                 continue
             long_qty  = getattr(pos, 'buy_qty',  0) or 0
