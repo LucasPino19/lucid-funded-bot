@@ -529,8 +529,11 @@ def main():
                 entry, orb_sizes_nuevos, motivo = signal_orb_entry(
                     df_hasta_ahora, hoy, c['capital'], c['orb_sizes'],
                     force_contrato=es_segundo, riesgo_pct=riesgo_activo)
-                # Solo actualizar orb_sizes una vez por dia — evita duplicados por multiples runs
-                if c.get('orb_size_dia') != dia_str:
+                # Actualizar orb_sizes solo cuando signal_orb_entry computó el ORB (append ocurrió)
+                # y solo una vez por dia — evita duplicados y evita que un early-return (sin datos
+                # suficientes aun) bloquee el guard el resto del dia sin haber grabado ningun ORB.
+                orb_fue_computado = len(orb_sizes_nuevos) > len(c.get('orb_sizes', []))
+                if orb_fue_computado and c.get('orb_size_dia') != dia_str:
                     estado[estrategia]['orb_sizes']   = orb_sizes_nuevos[-20:]
                     estado[estrategia]['orb_size_dia'] = dia_str
                 if entry:
