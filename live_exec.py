@@ -137,7 +137,7 @@ async def _flatten_async(qty, direccion):
         # 1. Cancelar legs SL/TP pendientes del bracket
         try:
             ordenes = await client.list_orders()
-            for orden in ordenes:
+            for orden in (ordenes or []):
                 if getattr(orden, 'symbol', '') != SYMBOL_LIVE:
                     continue
                 basket_id = getattr(orden, 'basket_id', None)
