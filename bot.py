@@ -365,8 +365,11 @@ def main():
                         print('[BOT] Error al intentar cerrar posicion desincronizada: %s' % _e_close)
                     estado['ORB_LIVE']['entradas_bloqueadas'] = dia_str
             elif qty_real == 0 and local_pos:
-                print('[BOT] ALERTA: posicion local existe pero Rithmic flat — limpiando local.')
-                estado['ORB_LIVE']['posicion_abierta'] = None
+                # Rithmic flat pero estado local tiene posicion — el bracket cerro entre runs.
+                # NO limpiar aqui: dejar que gestionar_posicion lo detecte con datos de barra
+                # reales para calcular el P&L correctamente y actualizar el capital.
+                # Si no detecta cierre en la barra actual, force_eod lo forzara al EOD.
+                print('[BOT] ALERTA: posicion local existe pero Rithmic flat — se procesara via bar data.')
         except Exception as _e:
             print('[BOT] No se pudo verificar posicion en Rithmic al inicio: %s' % _e)
 
