@@ -364,6 +364,10 @@ def main():
                     except Exception as _e_close:
                         print('[BOT] Error al intentar cerrar posicion desincronizada: %s' % _e_close)
                     estado['ORB_LIVE']['entradas_bloqueadas'] = dia_str
+                    # DISEÑO: ya_opero_hoy NO se setea aqui a proposito — no hubo trade real
+                    # (la posicion desincronizada se cerro, no se proceso P&L).
+                    # El reset del circuit breaker (L431) se ejecuta de todas formas si
+                    # ya_opero_hoy < dia_str, pero es inofensivo: entradas_bloqueadas impide entrar.
             elif qty_real == 0 and local_pos:
                 # Rithmic flat pero estado local tiene posicion — el bracket cerro entre runs.
                 # Marcar para cerrar inmediatamente en el loop de estrategias con force_eod=True:
