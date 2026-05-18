@@ -8,6 +8,7 @@ Dos cuentas independientes: ORB+VWAP e ICT Order Blocks.
 
 import json
 import os
+import tempfile
 from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
@@ -84,9 +85,14 @@ def cargar_estado():
 
 
 def guardar_estado(estado):
-    os.makedirs(os.path.dirname(ESTADO_FILE), exist_ok=True)
-    with open(ESTADO_FILE, 'w') as f:
-        json.dump(estado, f, indent=2, default=str)
+    dir_path = os.path.dirname(ESTADO_FILE)
+    os.makedirs(dir_path, exist_ok=True)
+    # Write atomico: si el proceso muere durante json.dump el archivo original queda intacto.
+    # os.replace() es atomico en todos los SO modernos — evita JSON corrupto que paraliza el bot.
+    with tempfile.NamedTemporaryFile('w', dir=dir_path, suffix='.tmp', delete=False) as tmp:
+        json.dump(estado, tmp, indent=2, default=str)
+        tmp_path = tmp.name
+    os.replace(tmp_path, ESTADO_FILE)
 
 
 # ══════════════════════════════════════════════
