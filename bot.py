@@ -513,8 +513,11 @@ def main():
                     order_id = submit_bracket_entry(entry)
                     if order_id is None:
                         print('[%s] Orden de actividad rechazada — no se reintenta hoy.' % estrategia)
+                        # DISEÑO: ya_opero_hoy se setea para no reintentar HOY,
+                        # pero ultimo_dia NO se toca — el reloj de 28 dias no resetea
+                        # hasta que haya un trade real. Consistente con el path ORB
+                        # (linea ~554) donde una orden rechazada tampoco actualiza ultimo_dia.
                         estado[estrategia]['ya_opero_hoy'] = dia_str
-                        estado[estrategia]['ultimo_dia']   = dia_str
                     else:
                         entry['order_id'] = order_id
                         estado[estrategia]['posicion_abierta'] = entry
