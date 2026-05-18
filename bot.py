@@ -472,8 +472,12 @@ def main():
                 continue  # posicion todavia abierta — no buscar nueva entrada
 
         # ── Actividad mínima: si pasaron >= 28 días sin trade ──
+        # Cuenta nueva (ultimo_dia vacio) -> dias_sin_trade=0 para que NO dispare
+        # forced activity en el primer run. Si fuera 999, una cuenta recien creada
+        # dispararia un trade artificial el primer dia (bug reproducido el 15-may-2026,
+        # commit 6fbb33e fixeo, b383d8f lo regreso, este es el re-fix).
         ultimo_trade = c.get('ultimo_dia', '')
-        dias_sin_trade = (hoy - date.fromisoformat(ultimo_trade)).days if ultimo_trade else 999
+        dias_sin_trade = (hoy - date.fromisoformat(ultimo_trade)).days if ultimo_trade else 0
         forzar_actividad = dias_sin_trade >= 28 and c.get('ya_opero_hoy') != dia_str
 
         if not forzar_actividad:
