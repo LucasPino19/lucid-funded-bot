@@ -20,7 +20,7 @@ _CALENDARIO = {
     date(2025,  1, 29): 'FOMC', date(2025,  3, 19): 'FOMC',
     date(2025,  5,  7): 'FOMC', date(2025,  6, 18): 'FOMC',
     date(2025,  7, 30): 'FOMC', date(2025,  9, 17): 'FOMC',
-    date(2025, 10, 29): 'FOMC', date(2025, 12, 10): 'FOMC',
+    date(2025, 10, 29): 'FOMC', date(2025, 12, 10): 'FOMC+CPI',
     date(2026,  1, 28): 'FOMC', date(2026,  3, 18): 'FOMC',
     date(2026,  5,  6): 'FOMC', date(2026,  6, 17): 'FOMC',
     date(2026,  7, 29): 'FOMC', date(2026,  9, 16): 'FOMC',
@@ -36,7 +36,7 @@ _CALENDARIO = {
     date(2026, 11,  6): 'NFP', date(2026, 12,  4): 'NFP',
     # CPI — 8:30am ET
     date(2025,  9, 10): 'CPI', date(2025, 10, 15): 'CPI',
-    date(2025, 11, 12): 'CPI', date(2025, 12, 10): 'CPI',
+    date(2025, 11, 12): 'CPI',  # dic-10 ya cubierto por FOMC+CPI
     date(2026,  1, 15): 'CPI', date(2026,  2, 12): 'CPI',
     date(2026,  3, 12): 'CPI', date(2026,  4, 10): 'CPI',
     date(2026,  5, 13): 'CPI', date(2026,  6, 10): 'CPI',
