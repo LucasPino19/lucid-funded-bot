@@ -324,6 +324,15 @@ def main():
                             print('[%s] FATAL: no se pudo cerrar huerfana — bloqueando entradas hoy.' % est)
                             estado[est]['entradas_bloqueadas'] = dia_str
                             continue
+                    else:
+                        # DISEÑO: Rithmic flat + local tiene posicion = bracket cerro entre runs
+                        # (tipicamente SL/TP disparado el fin de semana o durante la noche).
+                        # No limpiar posicion_abierta aqui — el reconciliador (abajo) detecta
+                        # qty_real==0/local_pos!=None y setea _force_gestionar=True para que
+                        # gestionar_posicion registre el P&L aproximado con el ultimo close.
+                        # Si limpiamos aqui, el capital queda incorrecto sin P&L registrado.
+                        print('[%s] Bracket cerro en Rithmic — reconciliador registrara P&L aproximado.' % est)
+                        continue
                 except Exception as _e:
                     print('[%s] Error al cerrar huerfana en Rithmic: %s' % (est, _e))
                     estado[est]['entradas_bloqueadas'] = dia_str
