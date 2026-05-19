@@ -506,6 +506,14 @@ def main():
             print('[%s] ACTIVIDAD FORZADA prioritaria — ignorando filtro de noticias.' % estrategia)
 
         if forzar_actividad:
+            if es_eod:
+                # DISEÑO: no abrir posicion pasado el EOD (16:30 ET).
+                # signal_actividad_minima solo filtra barras >= 16:30, pero el bot
+                # igual mandaria la orden a Rithmic y la posicion quedaria abierta
+                # hasta el run de las 17:35 ET — riesgo innecesario.
+                # El run siguiente (manana) vuelve a intentar si sigue activo el flag.
+                print('[%s] ACTIVIDAD FORZADA — bloqueada porque es EOD (>= 16:30 ET).' % estrategia)
+                continue
             print('[%s] ACTIVIDAD FORZADA — %d dias sin trade — entrando con 1 contrato minimo.' % (estrategia, dias_sin_trade))
             entry = signal_actividad_minima(df_hasta_ahora, hoy)
             if entry:
