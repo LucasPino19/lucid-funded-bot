@@ -451,6 +451,13 @@ def main():
                         'hora_entrada': datetime.now(ET).hour, 'dia': dia_str,
                     }
                     print('[BOT] Posicion re-registrada (ref=%.2f) | dejando correr con brackets Rithmic.' % _ref)
+                # Reset circuit breaker si es dia nuevo — el strategy loop no lo
+                # haria porque ya_opero_hoy ya queda igualado a dia_str aqui.
+                if estado['ORB_LIVE'].get('ya_opero_hoy', '') < dia_str:
+                    estado['ORB_LIVE']['consecutivas_hoy'] = 0
+                    estado['ORB_LIVE']['peak_capital'] = max(
+                        estado['ORB_LIVE'].get('peak_capital', PLAN['capital_inicial']),
+                        estado['ORB_LIVE']['capital'])
                 estado['ORB_LIVE']['ya_opero_hoy'] = dia_str
             elif qty_real > 0 and local_pos:
                 if (local_pos.get('direccion') != dir_real or
