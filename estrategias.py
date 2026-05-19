@@ -189,6 +189,11 @@ def signal_orb_entry(df_completo, fecha_hoy, capital, orb_sizes_hist, force_cont
     if len(indices_hoy) < 2:
         return None, orb_sizes_hist, 'Necesito >= 2 velas del dia'
 
+    # Primera vela de sesion regular: la primera que empieza >= 9:30 ET.
+    # Con velas 1h los timestamps son horas exactas (9:00, 10:00...) — nunca hay
+    # una vela con minute=30, por lo que se necesita >= y no ==.
+    # Para datos 1h: la vela 9:00 tiene (9,0) < (9,30) → se descarta;
+    # la vela 10:00 tiene (10,0) >= (9,30) → es i0 (el ORB bar correcto).
     i0 = next((i for i in indices_hoy
                if (fechas[i].astimezone(ET).hour, fechas[i].astimezone(ET).minute) >=
                   (ORB_HORA_INICIO, ORB_MIN_INICIO)), None)
@@ -463,6 +468,45 @@ def gestionar_posicion(posicion, df_completo, fecha_hoy, force_eod=False):
         }
 
     return None
+
+
+def cerrar_posicion_forzada(posicion, df_completo, fecha_cierre, motivo):
+    """
+    Cierra forzosamente una posicion al ultimo close disponible de `fecha_cierre`.
+    Devuelve un trade dict con resultado='timeout', o None si no hay datos para esa fecha.
+
+    Uso: registrar trades cuya gestion normal se perdio
+      - Orfana de dia anterior (run EOD nunca completo).
+      - Cierre invisible en Rithmic entre runs (SL/TP del bracket disparo y el bot no lo detecto).
+
+    P&L resultante es APROXIMADO — usa el ultimo close conocido del dia de entrada como salida.
+    El usuario deberia conciliar manualmente contra el statement de Rithmic.
+    """
+    if df_completo is None or len(df_completo) == 0:
+        return None
+
+    fechas = df_completo.index
+    closes = df_completo['Close'].values
+
+    indices_dia = [i for i, ts in enumerate(fechas)
+                   if ts.astimezone(ET).date() == fecha_cierre]
+    if not indices_dia:
+        # Sin datos del dia (rare: posicion de hace muchos dias fuera del df de 60d)
+        return None
+
+    precio_salida = float(closes[indices_dia[-1]])
+    puntos, ganancia = _calcular_trade(
+        None, posicion['entrada'], posicion['sl'],
+        posicion['direccion'], 'timeout', precio_salida, posicion['contratos']
+    )
+    return {
+        **posicion,
+        'salida':        round(precio_salida, 2),
+        'resultado':     'timeout',
+        'puntos':        puntos,
+        'ganancia':      ganancia,
+        'motivo_cierre': motivo,
+    }
 
 
 def signal_actividad_minima(df_completo, fecha_hoy):
