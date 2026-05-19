@@ -523,6 +523,14 @@ def main():
                 # El run siguiente (manana) vuelve a intentar si sigue activo el flag.
                 print('[%s] ACTIVIDAD FORZADA — bloqueada porque es EOD (>= 16:30 ET).' % estrategia)
                 continue
+            if c.get('entradas_bloqueadas') == dia_str:
+                # DISEÑO: entradas_bloqueadas se activa cuando el estado Rithmic es
+                # incierto (flatten fallido, desync). Enviar orden en este estado
+                # podria abrir una posicion sobre una ya existente o desconocida.
+                # ya_opero_hoy no siempre se setea en estos paths — por eso la
+                # comprobacion de forzar_actividad no los filtra. Bloqueamos aqui.
+                print('[%s] ACTIVIDAD FORZADA — bloqueada por Rithmic safety (entradas_bloqueadas).' % estrategia)
+                continue
             print('[%s] ACTIVIDAD FORZADA — %d dias sin trade — entrando con 1 contrato minimo.' % (estrategia, dias_sin_trade))
             entry = signal_actividad_minima(df_hasta_ahora, hoy)
             if entry:
