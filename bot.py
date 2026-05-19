@@ -16,7 +16,8 @@ import yfinance as yf
 
 from config import (CUENTA, PLANES, TICKER, SYMBOL_LIVE, ESTADO_FILE, REPORTS_DIR,
                     MAX_CONSEC_PERDIDAS, CIERRE_HORA, CIERRE_MIN)
-from estrategias import signal_orb_entry, signal_ict_entry, gestionar_posicion, signal_actividad_minima
+from estrategias import (signal_orb_entry, signal_ict_entry, gestionar_posicion,
+                         signal_actividad_minima, cerrar_posicion_forzada)
 from filtro_noticias import check_noticia
 
 # LIVE_MODE=true → ejecuta ordenes reales via Rithmic
@@ -156,8 +157,14 @@ def procesar_trade(cuenta_estado, trade, dia_str):
     elif trade['resultado'] == 'stop_loss':
         cuenta_estado['consecutivas_hoy'] += 1
         cuenta_estado['wins_seguidos']     = 0
-    else:  # timeout
-        cuenta_estado['consecutivas_hoy']  = 0
+    else:  # timeout (incluye recovery aproximado de B1/B2)
+        # B4 fix: un timeout en perdida cuenta como perdida para el circuit breaker.
+        # Antes: cualquier timeout reseteaba consecutivas_hoy, lo cual permitia 3 timeouts
+        # perdedores seguidos sin disparar el breaker.
+        if ganancia < 0:
+            cuenta_estado['consecutivas_hoy'] += 1
+        else:
+            cuenta_estado['consecutivas_hoy']  = 0
         cuenta_estado['wins_seguidos']     = 0
 
     cuenta_estado['ultimo_dia'] = dia_str
@@ -309,37 +316,108 @@ def main():
     estado = cargar_estado()
     _estado_emergencia = estado  # mismo objeto — mutations visibles desde el handler
 
-    # Cerrar posiciones huerfanas de dias anteriores
-    for est in list(estado.keys()):
-        if (estado[est].get('posicion_abierta') and
-                estado[est].get('ya_opero_hoy', '') < dia_str):
-            print('[%s] Posicion de dia anterior detectada — limpiando.' % est)
-            if LIVE_MODE and est == 'ORB_LIVE':
-                try:
-                    qty_real, dir_real = get_open_position()
-                    if qty_real > 0:
-                        print('[%s] Cerrando posicion real huerfana: %s x%d' % (est, dir_real, qty_real))
-                        ok = flatten_position(qty_real, dir_real)
-                        if not ok:
-                            print('[%s] FATAL: no se pudo cerrar huerfana — bloqueando entradas hoy.' % est)
-                            estado[est]['entradas_bloqueadas'] = dia_str
-                            continue
-                    else:
-                        # DISEÑO: Rithmic flat + local tiene posicion = bracket cerro entre runs
-                        # (tipicamente SL/TP disparado el fin de semana o durante la noche).
-                        # No limpiar posicion_abierta aqui — el reconciliador (abajo) detecta
-                        # qty_real==0/local_pos!=None y setea _force_gestionar=True para que
-                        # gestionar_posicion registre el P&L aproximado con el ultimo close.
-                        # Si limpiamos aqui, el capital queda incorrecto sin P&L registrado.
-                        print('[%s] Bracket cerro en Rithmic — reconciliador registrara P&L aproximado.' % est)
-                        continue
-                except Exception as _e:
-                    print('[%s] Error al cerrar huerfana en Rithmic: %s' % (est, _e))
-                    estado[est]['entradas_bloqueadas'] = dia_str
-                    continue
-            estado[est]['posicion_abierta'] = None
+    # ══════════════════════════════════════════════
+    # 1. DESCARGA DE DATOS (movido arriba — necesario para registrar trades huerfanos
+    #    con cerrar_posicion_forzada usando el dia de entrada, no el actual).
+    # ══════════════════════════════════════════════
+    # 60d: ADX(14) necesita 2*14+2=30 dias de trading; 30d da ~29, insuficiente
+    cutoff = ahora_et - timedelta(minutes=30)
+    if LIVE_MODE:
+        print('Descargando %s (60d, 1h) desde Rithmic...' % SYMBOL_LIVE)
+        df_hasta_ahora = fetch_historical_bars(num_trading_days=60)
+        if df_hasta_ahora is None or df_hasta_ahora.empty:
+            print('Sin datos de Rithmic — abortando.')
+            guardar_estado(estado)
+            return
+        df_hasta_ahora = df_hasta_ahora[df_hasta_ahora.index <= cutoff]
+    else:
+        print('Descargando %s (60d, 1h) desde yfinance...' % TICKER)
+        df = yf.download(TICKER, period='60d', interval='1h',
+                         auto_adjust=True, progress=False)
+        if hasattr(df.columns, 'levels'):
+            df.columns = [c[0] if isinstance(c, tuple) else c for c in df.columns]
+        df = df.dropna()
+        if df.empty:
+            print('Sin datos de yfinance — error de conexion o mercado cerrado.')
+            guardar_estado(estado)
+            return
+        if df.index.tz is None:
+            df.index = df.index.tz_localize('UTC')
+        df_hasta_ahora = df[df.index.tz_convert(ET) <= cutoff].tz_convert(ET)
 
-    # Reconciliacion completa Rithmic <-> estado local
+    if df_hasta_ahora.empty:
+        print('Sin datos completos aun (mercado recien abrio).')
+        guardar_estado(estado)
+        return
+
+    print('  %d velas | ultima: %s ET' % (
+        len(df_hasta_ahora),
+        df_hasta_ahora.index[-1].tz_convert(ET).strftime('%H:%M')
+    ))
+
+    # ══════════════════════════════════════════════
+    # 2. POSICIONES HUERFANAS DE DIAS ANTERIORES (con recovery del P&L)
+    # ══════════════════════════════════════════════
+    # Si el run EOD de ayer fallo, hoy aparece la posicion como abierta. Necesitamos:
+    #  (a) Cerrar en Rithmic si todavia sigue abierta alli.
+    #  (b) Registrar un trade aproximado usando el ultimo close del dia de entrada
+    #      (NO el de hoy — el SL/TP fue contra el precio de ayer, no de hoy).
+    #      Sin esto perdiamos el P&L del registro y peak_capital/drawdown quedaban
+    #      desincronizados (bug B2 del audit).
+    for est in list(estado.keys()):
+        if not (estado[est].get('posicion_abierta') and
+                estado[est].get('ya_opero_hoy', '') < dia_str):
+            continue
+
+        posicion_huerfana = estado[est]['posicion_abierta']
+        dia_entrada_str   = estado[est].get('ya_opero_hoy', '')
+        print('[%s] Posicion del %s detectada — cerrando y registrando recovery.' % (
+            est, dia_entrada_str))
+
+        # Paso 1: cerrar en Rithmic si LIVE y todavia esta abierta.
+        if LIVE_MODE and est == 'ORB_LIVE':
+            try:
+                qty_real, dir_real = get_open_position()
+                if qty_real > 0:
+                    print('[%s] Cerrando posicion real huerfana: %s x%d' % (est, dir_real, qty_real))
+                    ok = flatten_position(qty_real, dir_real)
+                    if not ok:
+                        print('[%s] FATAL: no se pudo cerrar huerfana — bloqueando entradas hoy.' % est)
+                        estado[est]['entradas_bloqueadas'] = dia_str
+                        continue
+                else:
+                    # Rithmic flat — el bracket SL/TP disparo durante la noche/fin de semana.
+                    # Cae al recovery abajo para registrar el trade aproximado.
+                    print('[%s] Rithmic flat — bracket cerro fuera de horario.' % est)
+            except Exception as _e:
+                print('[%s] Error al verificar/cerrar huerfana en Rithmic: %s' % (est, _e))
+                estado[est]['entradas_bloqueadas'] = dia_str
+                continue
+
+        # Paso 2: recovery — registrar trade aproximado con el ultimo close del dia de entrada.
+        # P&L es aproximado; el statement de Rithmic tiene el fill real (conciliar manualmente).
+        try:
+            dia_entrada = date.fromisoformat(dia_entrada_str) if dia_entrada_str else None
+            trade_recovery = (cerrar_posicion_forzada(
+                posicion_huerfana, df_hasta_ahora, dia_entrada,
+                motivo='orfana_dia_anterior')
+                if dia_entrada is not None else None)
+            if trade_recovery is not None:
+                print('[%s] RECOVERY: salida $%.2f, %+.1f pts, $%+.0f (APROXIMADO — conciliar)' % (
+                    est, trade_recovery['salida'], trade_recovery['puntos'],
+                    trade_recovery['ganancia']))
+                estado[est] = procesar_trade(estado[est], trade_recovery, dia_entrada_str)
+            else:
+                print('[%s] WARNING: sin datos del dia %s — trade huerfano perdido del registro.' % (
+                    est, dia_entrada_str))
+        except Exception as _e_rec:
+            print('[%s] Error registrando trade recovery: %s' % (est, _e_rec))
+
+        estado[est]['posicion_abierta'] = None
+
+    # ══════════════════════════════════════════════
+    # 3. RECONCILIACION RITHMIC ↔ ESTADO LOCAL (solo same-day, los cross-day ya se manejaron arriba)
+    # ══════════════════════════════════════════════
     if LIVE_MODE:
         try:
             qty_real, dir_real = get_open_position()
@@ -384,51 +462,16 @@ def main():
                     # El reset del circuit breaker (L431) se ejecuta de todas formas si
                     # ya_opero_hoy < dia_str, pero es inofensivo: entradas_bloqueadas impide entrar.
             elif qty_real == 0 and local_pos:
-                # Rithmic flat pero estado local tiene posicion — el bracket cerro entre runs.
-                # Marcar para cerrar inmediatamente en el loop de estrategias con force_eod=True:
-                # el SL/TP real de Rithmic puede diferir del calculado (slippage en fill MKT),
-                # por lo que gestionar_posicion podria no detectarlo con bar data normal.
-                # force_eod garantiza el cierre y registro del P&L en este mismo run.
+                # Rithmic flat pero estado local tiene posicion same-day — el bracket cerro
+                # entre runs. Marcamos _force_gestionar=True para que gestionar_posicion
+                # corra con force_eod=True en el strategy loop. Como la posicion es de HOY
+                # (ya_opero_hoy == dia_str — el caso cross-day ya se manejo arriba),
+                # los bars del df son del mismo dia: gestionar puede detectar el SL/TP del
+                # bracket en los bars, o si no, hacer fallback a force_eod con el ultimo close.
                 print('[BOT] ALERTA: posicion local existe pero Rithmic flat — cerrando localmente ahora.')
                 estado['ORB_LIVE']['_force_gestionar'] = True
         except Exception as _e:
             print('[BOT] No se pudo verificar posicion en Rithmic al inicio: %s' % _e)
-
-    # Descargar datos hasta ahora (solo velas completas)
-    # 60d: ADX(14) necesita 2*14+2=30 dias de trading; 30d da ~29, insuficiente
-    cutoff = ahora_et - timedelta(minutes=30)
-    if LIVE_MODE:
-        print('Descargando %s (60d, 1h) desde Rithmic...' % SYMBOL_LIVE)
-        df_hasta_ahora = fetch_historical_bars(num_trading_days=60)
-        if df_hasta_ahora is None or df_hasta_ahora.empty:
-            print('Sin datos de Rithmic — abortando.')
-            guardar_estado(estado)
-            return
-        df_hasta_ahora = df_hasta_ahora[df_hasta_ahora.index <= cutoff]
-    else:
-        print('Descargando %s (60d, 1h) desde yfinance...' % TICKER)
-        df = yf.download(TICKER, period='60d', interval='1h',
-                         auto_adjust=True, progress=False)
-        if hasattr(df.columns, 'levels'):
-            df.columns = [c[0] if isinstance(c, tuple) else c for c in df.columns]
-        df = df.dropna()
-        if df.empty:
-            print('Sin datos de yfinance — error de conexion o mercado cerrado.')
-            guardar_estado(estado)
-            return
-        if df.index.tz is None:
-            df.index = df.index.tz_localize('UTC')
-        df_hasta_ahora = df[df.index.tz_convert(ET) <= cutoff].tz_convert(ET)
-
-    if df_hasta_ahora.empty:
-        print('Sin datos completos aun (mercado recien abrio).')
-        guardar_estado(estado)
-        return
-
-    print('  %d velas | ultima: %s ET' % (
-        len(df_hasta_ahora),
-        df_hasta_ahora.index[-1].tz_convert(ET).strftime('%H:%M')
-    ))
 
     trades_cerrados_hoy = {}
 
@@ -594,7 +637,9 @@ def main():
                 obs_usados_set = set(c['obs_usados'])
                 entry, obs_nuevos, motivo = signal_ict_entry(
                     df_hasta_ahora, hoy, c['capital'], obs_usados_set)
-                estado[estrategia]['obs_usados'] = list(obs_nuevos)
+                # B8 fix: sorted para que los diffs de estado.json sean deterministicos
+                # (set serializa a lista en orden arbitrario, ensuciando commits del workflow).
+                estado[estrategia]['obs_usados'] = sorted(obs_nuevos)
                 if entry:
                     estado[estrategia]['posicion_abierta'] = entry
                     estado[estrategia]['ya_opero_hoy']     = dia_str
