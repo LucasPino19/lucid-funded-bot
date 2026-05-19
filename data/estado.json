@@ -41,11 +41,11 @@
     ],
     "obs_usados": [],
     "posicion_abierta": null,
-    "ya_opero_hoy": "2026-05-18",
+    "ya_opero_hoy": "2026-05-19",
     "peak_capital": 25018.0,
     "orb_size_dia": "2026-05-19",
     "wins_seguidos": 0,
-    "entradas_bloqueadas": "2026-05-18"
+    "entradas_bloqueadas": "2026-05-19"
   },
   "ORB_SIM": {
     "estrategia": "ORB_SIM",
