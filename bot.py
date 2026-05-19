@@ -425,20 +425,33 @@ def main():
 
             if qty_real > 0 and not local_pos:
                 # Rithmic tiene una posicion que el estado local desconoce.
-                # No sabemos su SL/TP (puede ser un bracket huerfano sin gestion) — la cerramos
-                # de inmediato y bloqueamos entradas hoy para no operar en estado inconsistente.
-                print('[BOT] ALERTA: Rithmic tiene posicion no registrada (%s x%d) — cerrando ahora.' % (
+                # La dejamos correr con sus brackets SL/TP en Rithmic — re-registramos
+                # en estado.json para poder trackear el P&L al cierre natural.
+                print('[BOT] ALERTA: Rithmic tiene posicion no registrada (%s x%d) — re-registrando.' % (
                     dir_real, qty_real))
-                try:
-                    ok_close = flatten_position(qty_real, dir_real)
-                    if ok_close:
-                        print('[BOT] Posicion desconocida cerrada — bloqueando entradas hoy por seguridad.')
-                    else:
-                        print('[BOT] FATAL: no se pudo cerrar posicion desconocida — revisar manualmente en Rithmic.')
-                except Exception as _e_close:
-                    print('[BOT] Error al intentar cerrar posicion desconocida: %s' % _e_close)
-                estado['ORB_LIVE']['ya_opero_hoy']        = dia_str
-                estado['ORB_LIVE']['entradas_bloqueadas'] = dia_str
+                _sig_rec, _, _ = signal_orb_entry(
+                    df_hasta_ahora, hoy,
+                    estado['ORB_LIVE'].get('capital', PLAN['capital_inicial']),
+                    estado['ORB_LIVE'].get('orb_sizes', []))
+                if _sig_rec and _sig_rec['direccion'] == dir_real:
+                    estado['ORB_LIVE']['posicion_abierta'] = {**_sig_rec, 'contratos': qty_real, 'dia': dia_str}
+                    print('[BOT] Posicion re-registrada — %s @ %.2f SL=%.2f TP=%.2f | dejando correr.' % (
+                        dir_real, _sig_rec['entrada'], _sig_rec['sl'], _sig_rec['tp']))
+                else:
+                    # Señal no reconstruible — usar último bar + ORB size como referencia
+                    _orb_sizes = estado['ORB_LIVE'].get('orb_sizes', [])
+                    _orb_ref   = _orb_sizes[-1] if _orb_sizes else float(df_hasta_ahora['Close'].iloc[-1]) * 0.005
+                    _ref       = float(df_hasta_ahora['Close'].iloc[-1])
+                    _sl  = round(_ref - _orb_ref * 1.5 if dir_real == 'LONG' else _ref + _orb_ref * 1.5, 2)
+                    _tp  = round(_ref + _orb_ref * 1.5 if dir_real == 'LONG' else _ref - _orb_ref * 1.5, 2)
+                    estado['ORB_LIVE']['posicion_abierta'] = {
+                        'estrategia': 'ORB', 'direccion': dir_real,
+                        'entrada': _ref, 'sl': _sl, 'tp': _tp,
+                        'contratos': qty_real, 'orb_size': round(_orb_ref, 2), 'adx': 0,
+                        'hora_entrada': datetime.now(ET).hour, 'dia': dia_str,
+                    }
+                    print('[BOT] Posicion re-registrada (ref=%.2f) | dejando correr con brackets Rithmic.' % _ref)
+                estado['ORB_LIVE']['ya_opero_hoy'] = dia_str
             elif qty_real > 0 and local_pos:
                 if (local_pos.get('direccion') != dir_real or
                         local_pos.get('contratos') != qty_real):
