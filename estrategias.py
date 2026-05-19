@@ -308,7 +308,11 @@ def signal_ict_entry(df_completo, fecha_hoy, capital, obs_usados):
             ob_high = ob['ob_high']
             ob_low  = ob['ob_low']
             ob_size = ob_high - ob_low
-            clave   = '%d_%s' % (idx, tipo)
+            # DISEÑO: clave basada en timestamp del bar, NO en indice posicional.
+            # El indice cambia cada dia porque la ventana de 60d descarta barras antiguas
+            # del inicio del dataset — el mismo OB apareceria con un indice distinto y
+            # pasaria el filtro de deduplicacion, causando re-entradas al mismo bloque.
+            clave   = '%s_%s' % (str(fechas[idx]), tipo)
 
             if clave in obs_usados or ob_size <= 0 or j <= idx + 3:
                 continue
