@@ -326,10 +326,21 @@ def main():
         print('Descargando %s (60d, 1h) desde Rithmic...' % SYMBOL_LIVE)
         df_hasta_ahora = fetch_historical_bars(num_trading_days=60)
         if df_hasta_ahora is None or df_hasta_ahora.empty:
-            print('Sin datos de Rithmic — abortando.')
-            guardar_estado(estado)
-            return
-        df_hasta_ahora = df_hasta_ahora[df_hasta_ahora.index <= cutoff]
+            print('Rithmic sin datos — fallback a yfinance (%s)...' % TICKER)
+            df = yf.download(TICKER, period='60d', interval='1h',
+                             auto_adjust=True, progress=False)
+            if hasattr(df.columns, 'levels'):
+                df.columns = [c[0] if isinstance(c, tuple) else c for c in df.columns]
+            df = df.dropna()
+            if df.empty:
+                print('Sin datos de yfinance — abortando.')
+                guardar_estado(estado)
+                return
+            if df.index.tz is None:
+                df.index = df.index.tz_localize('UTC')
+            df_hasta_ahora = df[df.index.tz_convert(ET) <= cutoff].tz_convert(ET)
+        else:
+            df_hasta_ahora = df_hasta_ahora[df_hasta_ahora.index <= cutoff]
     else:
         print('Descargando %s (60d, 1h) desde yfinance...' % TICKER)
         df = yf.download(TICKER, period='60d', interval='1h',
