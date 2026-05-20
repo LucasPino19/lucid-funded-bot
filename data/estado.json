@@ -48,13 +48,14 @@
     "ultimo_dia": "2026-05-19",
     "orb_sizes": [
       40.75,
-      39.25
+      39.25,
+      56.75
     ],
     "obs_usados": [],
     "posicion_abierta": null,
     "ya_opero_hoy": "2026-05-19",
     "peak_capital": 25018.0,
-    "orb_size_dia": "2026-05-19",
+    "orb_size_dia": "2026-05-20",
     "wins_seguidos": 0,
     "entradas_bloqueadas": ""
   },
