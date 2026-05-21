@@ -12,6 +12,7 @@ import tempfile
 from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
+import pandas as pd
 import yfinance as yf
 
 from config import (CUENTA, PLANES, TICKER, SYMBOL_LIVE, ESTADO_FILE, REPORTS_DIR,
@@ -24,7 +25,7 @@ from filtro_noticias import check_noticia
 LIVE_MODE = os.environ.get('LIVE_MODE', 'false').lower() == 'true'
 if LIVE_MODE:
     try:
-        from live_exec import submit_bracket_entry, get_open_position, flatten_position, fetch_historical_bars
+        from live_exec import submit_bracket_entry, get_open_position, flatten_position, fetch_historical_bars, fetch_today_bars
     except Exception as _import_err:
         print('[BOT] ERROR importando live_exec: %s' % _import_err)
         print('[BOT] Continuando en modo simulacion.')
@@ -323,24 +324,36 @@ def main():
     # 60d: ADX(14) necesita 2*14+2=30 dias de trading; 30d da ~29, insuficiente
     cutoff = ahora_et - timedelta(minutes=30)
     if LIVE_MODE:
-        print('Descargando %s (60d, 1h) desde Rithmic...' % SYMBOL_LIVE)
-        df_hasta_ahora = fetch_historical_bars(num_trading_days=60)
-        if df_hasta_ahora is None or df_hasta_ahora.empty:
-            print('Rithmic sin datos — fallback a yfinance (%s)...' % TICKER)
-            df = yf.download(TICKER, period='60d', interval='1h',
-                             auto_adjust=True, progress=False)
-            if hasattr(df.columns, 'levels'):
-                df.columns = [c[0] if isinstance(c, tuple) else c for c in df.columns]
-            df = df.dropna()
-            if df.empty:
-                print('Sin datos de yfinance — abortando.')
-                guardar_estado(estado)
-                return
-            if df.index.tz is None:
-                df.index = df.index.tz_localize('UTC')
-            df_hasta_ahora = df[df.index.tz_convert(ET) <= cutoff].tz_convert(ET)
+        # Historico largo desde yfinance (barras cerradas del pasado — sin delay real)
+        print('Descargando %s (60d, 1h) desde yfinance...' % TICKER)
+        df_hist = yf.download(TICKER, period='60d', interval='1h',
+                              auto_adjust=True, progress=False)
+        if hasattr(df_hist.columns, 'levels'):
+            df_hist.columns = [c[0] if isinstance(c, tuple) else c for c in df_hist.columns]
+        df_hist = df_hist.dropna()
+        if df_hist.empty:
+            print('Sin datos de yfinance — abortando.')
+            guardar_estado(estado)
+            return
+        if df_hist.index.tz is None:
+            df_hist.index = df_hist.index.tz_localize('UTC')
+        df_hist = df_hist.tz_convert(ET)
+
+        # Barras de hoy desde Rithmic (tiempo real, sin delay)
+        print('Descargando barras de hoy desde Rithmic...')
+        df_hoy = fetch_today_bars()
+        if df_hoy is not None and not df_hoy.empty:
+            hoy_date = ahora_et.date()
+            df_hist   = df_hist[df_hist.index.date < hoy_date]
+            df_merged = pd.concat([df_hist, df_hoy]).sort_index()
+            df_merged = df_merged[~df_merged.index.duplicated(keep='last')]
+            print('  Rithmic: %d barras de hoy | ultima: %s ET' % (
+                len(df_hoy), df_hoy.index[-1].strftime('%H:%M')))
         else:
-            df_hasta_ahora = df_hasta_ahora[df_hasta_ahora.index <= cutoff]
+            print('  Rithmic sin datos — usando yfinance para hoy (delay 15min)')
+            df_merged = df_hist
+
+        df_hasta_ahora = df_merged[df_merged.index <= cutoff]
     else:
         print('Descargando %s (60d, 1h) desde yfinance...' % TICKER)
         df = yf.download(TICKER, period='60d', interval='1h',

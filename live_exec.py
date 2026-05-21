@@ -231,6 +231,67 @@ def fetch_historical_bars(num_trading_days=60):
         print('[LIVE] ERROR al descargar barras historicas: %s' % e)
         return None
 
+
+async def _fetch_today_bars_async():
+    from datetime import timezone
+    client = _make_client()
+    await client.connect()
+
+    end_time   = datetime.now(timezone.utc)
+    start_time = end_time - timedelta(hours=28)  # desde ayer para capturar sesion completa
+
+    bars = await client.get_historical_time_bars(
+        symbol=SYMBOL_LIVE,
+        exchange=EXCHANGE_LIVE,
+        start_time=start_time,
+        end_time=end_time,
+        bar_type=TimeBarType.MINUTE_BAR,
+        bar_type_periods=60,
+    )
+    try:
+        await client.disconnect()
+    except Exception:
+        pass
+    return bars
+
+
+def fetch_today_bars():
+    """Descarga barras de las ultimas 28h desde Rithmic (sesion de hoy). Devuelve DataFrame ET o None."""
+    try:
+        bars = asyncio.run(_fetch_today_bars_async())
+    except Exception as e:
+        print('[LIVE] ERROR al descargar barras de hoy: %s' % e)
+        return None
+
+    if not bars:
+        print('[LIVE] Rithmic devolvio 0 barras de hoy.')
+        return None
+
+    rows = []
+    for bar in bars:
+        marker = bar.get('marker')
+        if not marker:
+            continue
+        ts = datetime.fromtimestamp(marker, tz=ET)
+        rows.append({
+            'datetime': ts,
+            'Open':   float(bar.get('open_price',  0) or 0),
+            'High':   float(bar.get('high_price',  0) or 0),
+            'Low':    float(bar.get('low_price',   0) or 0),
+            'Close':  float(bar.get('close_price', 0) or 0),
+            'Volume': int(bar.get('volume',        0) or 0),
+        })
+
+    if not rows:
+        return None
+
+    df = pd.DataFrame(rows).set_index('datetime')
+    df = df[~df.index.duplicated(keep='last')].sort_index()
+    df = df[df['Close'] > 0]
+    # Rithmic etiqueta END time → convertir a start-time (igual que fetch_historical_bars)
+    df.index = df.index - pd.Timedelta(hours=1)
+    return df
+
     if not bars:
         print('[LIVE] Rithmic devolvio 0 barras.')
         return None
