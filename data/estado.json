@@ -53,8 +53,19 @@
       32.0
     ],
     "obs_usados": [],
-    "posicion_abierta": null,
-    "ya_opero_hoy": "2026-05-19",
+    "posicion_abierta": {
+      "estrategia": "ORB",
+      "direccion": "LONG",
+      "entrada": 7443.75,
+      "sl": 7395.75,
+      "tp": 7491.75,
+      "contratos": 1,
+      "orb_size": 32.0,
+      "adx": 26.7,
+      "hora_entrada": 14,
+      "dia": "2026-05-21"
+    },
+    "ya_opero_hoy": "2026-05-21",
     "peak_capital": 25018.0,
     "orb_size_dia": "2026-05-21",
     "wins_seguidos": 0,
