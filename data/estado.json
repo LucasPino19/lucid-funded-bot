@@ -3,13 +3,13 @@
     "estrategia": "ORB_LIVE",
     "cuenta": "25k",
     "capital_inicial": 25000,
-    "capital": 25081.5,
-    "ganancia_total": 81.5,
+    "capital": 24961.0,
+    "ganancia_total": -39.0,
     "ganancia_por_dia": {
-      "2026-05-15": 16.0,
-      "2026-05-18": -15.5,
-      "2026-05-19": -37.5,
-      "2026-05-21": 118.5
+      "2026-05-15": 19.0,
+      "2026-05-18": -18.5,
+      "2026-05-19": -38.5,
+      "2026-05-21": -1.0
     },
     "trades": [
       {
@@ -17,19 +17,19 @@
         "estrategia": "ORB",
         "direccion": "LONG",
         "resultado": "take_profit",
-        "puntos": 4.0,
+        "puntos": 3.8,
         "contratos": 1,
-        "ganancia": 16.0,
-        "capital": 25016.0
+        "ganancia": 19.0,
+        "capital": 25019.0
       },
       {
         "dia": "2026-05-18",
         "estrategia": "ORB",
         "direccion": "SHORT",
         "resultado": "reconciliacion_rithmic",
-        "puntos": -3.5,
+        "puntos": -3.7,
         "contratos": 1,
-        "ganancia": -15.5,
+        "ganancia": -18.5,
         "capital": 25000.5
       },
       {
@@ -37,20 +37,20 @@
         "estrategia": "ORB",
         "direccion": "LONG",
         "resultado": "reconciliacion_rithmic",
-        "puntos": -7.5,
+        "puntos": -7.7,
         "contratos": 1,
-        "ganancia": -37.5,
-        "capital": 24963.0
+        "ganancia": -38.5,
+        "capital": 24962.0
       },
       {
         "dia": "2026-05-21",
         "estrategia": "ORB",
         "direccion": "LONG",
         "resultado": "timeout",
-        "puntos": 24.5,
+        "puntos": -0.2,
         "contratos": 1,
-        "ganancia": 118.5,
-        "capital": 25081.5
+        "ganancia": -1.0,
+        "capital": 24961.0
       }
     ],
     "estado": "activa",
@@ -66,7 +66,7 @@
     "obs_usados": [],
     "posicion_abierta": null,
     "ya_opero_hoy": "2026-05-21",
-    "peak_capital": 25081.5,
+    "peak_capital": 25019.0,
     "orb_size_dia": "2026-05-21",
     "wins_seguidos": 0,
     "entradas_bloqueadas": ""
