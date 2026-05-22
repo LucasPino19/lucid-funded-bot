@@ -3,8 +3,8 @@
     "estrategia": "ORB_LIVE",
     "cuenta": "25k",
     "capital_inicial": 25000,
-    "capital": 24879.5,
-    "ganancia_total": -120.5,
+    "capital": 24797.0,
+    "ganancia_total": -203.0,
     "ganancia_por_dia": {
       "2026-05-15": 19.0,
       "2026-05-18": -18.5,
@@ -51,6 +51,16 @@
         "contratos": 1,
         "ganancia": -82.5,
         "capital": 24879.5
+      },
+      {
+        "dia": "2026-05-22",
+        "estrategia": "ORB",
+        "direccion": "LONG",
+        "resultado": "reconciliacion_rithmic",
+        "puntos": -16.5,
+        "contratos": 1,
+        "ganancia": -82.5,
+        "capital": 24797.0
       }
     ],
     "estado": "activa",
@@ -65,18 +75,7 @@
       31.5
     ],
     "obs_usados": [],
-    "posicion_abierta": {
-      "estrategia": "ORB",
-      "direccion": "LONG",
-      "entrada": 7510.25,
-      "sl": 7463.0,
-      "tp": 7557.5,
-      "contratos": 1,
-      "orb_size": 31.5,
-      "adx": 27.2,
-      "hora_entrada": 11,
-      "dia": "2026-05-22"
-    },
+    "posicion_abierta": null,
     "ya_opero_hoy": "2026-05-22",
     "peak_capital": 25019.0,
     "orb_size_dia": "2026-05-22",
