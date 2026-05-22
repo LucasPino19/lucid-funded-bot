@@ -61,13 +61,14 @@
       40.75,
       39.25,
       56.75,
-      32.0
+      32.0,
+      31.5
     ],
     "obs_usados": [],
     "posicion_abierta": null,
     "ya_opero_hoy": "2026-05-21",
     "peak_capital": 25019.0,
-    "orb_size_dia": "2026-05-21",
+    "orb_size_dia": "2026-05-22",
     "wins_seguidos": 0,
     "entradas_bloqueadas": ""
   },
