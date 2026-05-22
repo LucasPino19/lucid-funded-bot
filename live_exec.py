@@ -176,19 +176,35 @@ async def _flatten_async(qty, direccion):
                     raise RuntimeError('Rithmic rechazo el cierre — rp_code=%s' % rp_c_list)
 
         # 3. VERIFICAR que la posicion realmente esta flat
-        await asyncio.sleep(2)
-        positions = await client.list_positions()
-        for pos in (positions or []):
-            if getattr(pos, 'symbol', '') != SYMBOL_LIVE:
+        # Reintenta hasta 3 veces con 4s de espera — Rithmic puede tardar en actualizar,
+        # especialmente cerca del cierre del viernes (5pm ET) o si hay latencia.
+        # CRITICO: si list_positions() devuelve None/vacio no se puede confirmar flat
+        # (podria ser un timeout de API, no que la posicion se cerro). En ese caso
+        # se reintenta; si tras 3 intentos sigue vacio, se lanza error para forzar
+        # reconciliacion manual en lugar de marcar la posicion como cerrada en falso.
+        for intento in range(3):
+            await asyncio.sleep(4)
+            positions = await client.list_positions()
+            if positions is None:
+                print('[LIVE] Verificacion cierre intento %d/3: list_positions() devolvio None — reintentando.' % (intento + 1))
                 continue
-            long_qty  = getattr(pos, 'buy_qty',  0) or 0
-            short_qty = getattr(pos, 'sell_qty', 0) or 0
-            net = long_qty - short_qty
-            if net != 0:
-                raise RuntimeError('Posicion sigue abierta despues del cierre: net=%d' % net)
+            aun_abierta = False
+            for pos in positions:
+                if getattr(pos, 'symbol', '') != SYMBOL_LIVE:
+                    continue
+                long_qty  = getattr(pos, 'buy_qty',  0) or 0
+                short_qty = getattr(pos, 'sell_qty', 0) or 0
+                net = long_qty - short_qty
+                if net != 0:
+                    aun_abierta = True
+                    break
+            if aun_abierta:
+                raise RuntimeError('Posicion sigue abierta despues del cierre (intento %d/3)' % (intento + 1))
+            # list_positions() devolvio lista valida (aunque vacia) y no encontro posicion abierta
+            print('[LIVE] Cierre confirmado FLAT (intento %d/3): %s' % (intento + 1, order_id))
+            return True
 
-        print('[LIVE] Cierre confirmado FLAT: %s' % order_id)
-        return True
+        raise RuntimeError('No se pudo verificar cierre — list_positions() devolvio None en 3 intentos. Reconciliar manualmente.')
     finally:
         try:
             await client.disconnect()

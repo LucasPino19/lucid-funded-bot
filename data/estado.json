@@ -3,8 +3,8 @@
     "estrategia": "ORB_LIVE",
     "cuenta": "25k",
     "capital_inicial": 25000,
-    "capital": 24961.0,
-    "ganancia_total": -39.0,
+    "capital": 24879.5,
+    "ganancia_total": -120.5,
     "ganancia_por_dia": {
       "2026-05-15": 19.0,
       "2026-05-18": -18.5,
@@ -46,11 +46,11 @@
         "dia": "2026-05-21",
         "estrategia": "ORB",
         "direccion": "LONG",
-        "resultado": "timeout",
-        "puntos": -0.2,
+        "resultado": "reconciliacion_rithmic",
+        "puntos": -16.5,
         "contratos": 1,
-        "ganancia": -1.0,
-        "capital": 24961.0
+        "ganancia": -82.5,
+        "capital": 24879.5
       }
     ],
     "estado": "activa",
