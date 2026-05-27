@@ -41,9 +41,10 @@ COSTO_CONTRATO = 4      # slippage $2.50 + comisión $1.50
 PAYOUT_FLOOR = 26_500   # nunca retirar por debajo de este balance
 
 # ── ORB + VWAP ──
-ORB_STOP_MULT   = 1.5   # stop = 1.5x el rango ORB
-ORB_TARGET_MULT = 1.5   # target = 1.5x el rango ORB
-ORB_VOLT_FILTRO = 1.5   # skip si ORB > 1.5x promedio 10 días
+ORB_STOP_MULT        = 1.5   # stop = 1.5x el rango ORB
+ORB_TARGET_MULT      = 1.5   # target = 1.5x el rango ORB
+ORB_VOLT_FILTRO      = 1.5   # skip si ORB > 1.5x promedio 10 días
+ORB_MOMENTUM_UMBRAL  = 0.35  # close_pos SHORT ≤ 35%, LONG ≥ 65% del rango de la vela
 ORB_HORA_INICIO = 9     # primera vela de sesión regular (9:30 ET)
 ORB_MIN_INICIO  = 30
 ORB_VENTANA_H   = 15    # solo entrar antes de las 3:00pm ET (variante B — backtest 500 evals)

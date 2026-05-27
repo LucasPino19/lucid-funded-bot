@@ -9,7 +9,7 @@ import pandas as pd
 from datetime import timedelta
 from zoneinfo import ZoneInfo
 from config import (MULT, RIESGO_PCT, COSTO_CONTRATO, ADX_MIN,
-                    ORB_STOP_MULT, ORB_TARGET_MULT, ORB_VOLT_FILTRO,
+                    ORB_STOP_MULT, ORB_TARGET_MULT, ORB_VOLT_FILTRO, ORB_MOMENTUM_UMBRAL,
                     ORB_HORA_INICIO, ORB_MIN_INICIO, ORB_VENTANA_H, ORB_VENTANA_M,
                     ICT_IMPULSO, ICT_STOP_MULT, ICT_TARGET_MULT, ICT_LOOKBACK,
                     CIERRE_HORA, CIERRE_MIN, PLANES, CUENTA, GLOBEX_ALIGNED)
@@ -232,12 +232,19 @@ def signal_orb_entry(df_completo, fecha_hoy, capital, orb_sizes_hist, force_cont
     vwap_i  = vwap_vals[i]
     entrada = None
 
+    rango_vela = highs[i] - lows[i]
+    close_pos  = (closes[i] - lows[i]) / rango_vela if rango_vela > 0 else 0.5
+
     if closes[i] > orb_high and precio > vwap_i:
+        if close_pos < (1 - ORB_MOMENTUM_UMBRAL):
+            return None, sizes_nuevos, 'Momentum debil LONG (close_pos=%.2f)' % close_pos
         entrada   = orb_high
         sl        = entrada - stop_dist
         tp        = entrada + target_dist
         direccion = 'LONG'
     elif closes[i] < orb_low and precio < vwap_i:
+        if close_pos > ORB_MOMENTUM_UMBRAL:
+            return None, sizes_nuevos, 'Momentum debil SHORT (close_pos=%.2f)' % close_pos
         entrada   = orb_low
         sl        = entrada + stop_dist
         tp        = entrada - target_dist
