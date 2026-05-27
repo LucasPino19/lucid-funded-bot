@@ -4,8 +4,9 @@ on:
   workflow_dispatch:
     # Disparado por cron-job.org via GitHub API (mas confiable que GitHub cron)
   schedule:
-    # Respaldo: cada hora durante mercado (lun-vie, 14:05-22:05 UTC cubre DST e invierno)
-    - cron: '5 14-22 * * 1-5'
+    # Respaldo: cada hora durante mercado (lun-vie, 14:37-22:37 UTC = 10:37-18:37 EDT)
+    # Velas cierran a las :30 ET — :37 UTC da 7 min de margen para que Rithmic publique la barra.
+    - cron: '37 14-22 * * 1-5'
 
 concurrency:
   group: lucid-bot

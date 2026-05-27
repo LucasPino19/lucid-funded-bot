@@ -240,13 +240,44 @@ async def _fetch_bars_async(num_trading_days):
     return bars
 
 
-def fetch_historical_bars(num_trading_days=60):
-    """Descarga velas 1h de Rithmic. Devuelve DataFrame OHLCV con DatetimeIndex ET, o None si falla."""
+def fetch_historical_bars(num_calendar_days=90):
+    """Descarga velas 1h de Rithmic (90 dias calendario ≈ 63 trading days). Devuelve DataFrame ET o None."""
     try:
-        bars = asyncio.run(_fetch_bars_async(num_trading_days))
+        bars = asyncio.run(_fetch_bars_async(num_calendar_days))
     except Exception as e:
         print('[LIVE] ERROR al descargar barras historicas: %s' % e)
         return None
+
+    if not bars:
+        print('[LIVE] Rithmic devolvio 0 barras historicas.')
+        return None
+
+    rows = []
+    for bar in bars:
+        marker = bar.get('marker')
+        if not marker:
+            continue
+        ts = datetime.fromtimestamp(marker, tz=ET)
+        rows.append({
+            'datetime': ts,
+            'Open':   float(bar.get('open_price',  0) or 0),
+            'High':   float(bar.get('high_price',  0) or 0),
+            'Low':    float(bar.get('low_price',   0) or 0),
+            'Close':  float(bar.get('close_price', 0) or 0),
+            'Volume': int(bar.get('volume',        0) or 0),
+        })
+
+    if not rows:
+        return None
+
+    df = pd.DataFrame(rows).set_index('datetime')
+    df = df[~df.index.duplicated(keep='last')].sort_index()
+    df = df[df['Close'] > 0]
+    # Rithmic etiqueta END time → convertir a start-time
+    df.index = df.index - pd.Timedelta(hours=1)
+    print('[LIVE] Historico Rithmic: %d barras | %s → %s ET' % (
+        len(df), df.index[0].strftime('%Y-%m-%d'), df.index[-1].strftime('%Y-%m-%d')))
+    return df
 
 
 async def _fetch_today_bars_async():
@@ -305,37 +336,7 @@ def fetch_today_bars():
     df = pd.DataFrame(rows).set_index('datetime')
     df = df[~df.index.duplicated(keep='last')].sort_index()
     df = df[df['Close'] > 0]
-    # Rithmic etiqueta END time → convertir a start-time (igual que fetch_historical_bars)
-    df.index = df.index - pd.Timedelta(hours=1)
-    return df
-
-    if not bars:
-        print('[LIVE] Rithmic devolvio 0 barras.')
-        return None
-
-    rows = []
-    for bar in bars:
-        marker = bar.get('marker')
-        if not marker:
-            continue
-        ts = datetime.fromtimestamp(marker, tz=ET)
-        rows.append({
-            'datetime': ts,
-            'Open':   float(bar.get('open_price',  0) or 0),
-            'High':   float(bar.get('high_price',  0) or 0),
-            'Low':    float(bar.get('low_price',   0) or 0),
-            'Close':  float(bar.get('close_price', 0) or 0),
-            'Volume': int(bar.get('volume',        0) or 0),
-        })
-
-    if not rows:
-        return None
-
-    df = pd.DataFrame(rows).set_index('datetime')
-    df = df[~df.index.duplicated(keep='last')].sort_index()
-    df = df[df['Close'] > 0]
-    # Rithmic etiqueta cada barra con su END time; yfinance usa START time.
-    # estrategias.py espera start-time → restamos la duracion de la barra (1h).
+    # Rithmic etiqueta END time → convertir a start-time
     df.index = df.index - pd.Timedelta(hours=1)
     return df
 

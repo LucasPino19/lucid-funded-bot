@@ -323,24 +323,17 @@ def main():
     #    con cerrar_posicion_forzada usando el dia de entrada, no el actual).
     # ══════════════════════════════════════════════
     # 60d: ADX(14) necesita 2*14+2=30 dias de trading; 30d da ~29, insuficiente
-    cutoff = ahora_et - timedelta(minutes=30)
+    cutoff = ahora_et - timedelta(minutes=5)
     if LIVE_MODE:
-        # Historico largo desde yfinance (barras cerradas del pasado — sin delay real)
-        print('Descargando %s (60d, 1h) desde yfinance...' % TICKER)
-        df_hist = yf.download(TICKER, period='60d', interval='1h',
-                              auto_adjust=True, progress=False)
-        if hasattr(df_hist.columns, 'levels'):
-            df_hist.columns = [c[0] if isinstance(c, tuple) else c for c in df_hist.columns]
-        df_hist = df_hist.dropna()
-        if df_hist.empty:
-            print('Sin datos de yfinance — abortando.')
+        # Historico largo desde Rithmic (90 dias calendario ≈ 63 trading days)
+        print('Descargando historico desde Rithmic (90d)...')
+        df_hist = fetch_historical_bars(90)
+        if df_hist is None or df_hist.empty:
+            print('[BOT] Rithmic no devolvio barras historicas — abortando.')
             guardar_estado(estado)
             return
-        if df_hist.index.tz is None:
-            df_hist.index = df_hist.index.tz_localize('UTC')
-        df_hist = df_hist.tz_convert(ET)
 
-        # Barras de hoy desde Rithmic (tiempo real, sin delay)
+        # Barras de hoy desde Rithmic (sesion actual)
         print('Descargando barras de hoy desde Rithmic...')
         df_hoy = fetch_today_bars()
         if df_hoy is not None and not df_hoy.empty:
@@ -348,27 +341,47 @@ def main():
             df_hist   = df_hist[df_hist.index.date < hoy_date]
             df_merged = pd.concat([df_hist, df_hoy]).sort_index()
             df_merged = df_merged[~df_merged.index.duplicated(keep='last')]
-            print('  Rithmic: %d barras de hoy | ultima: %s ET' % (
+            print('  Hoy: %d barras | ultima: %s ET' % (
                 len(df_hoy), df_hoy.index[-1].strftime('%H:%M')))
         else:
-            print('  Rithmic sin datos — usando yfinance para hoy (delay 15min)')
+            print('[BOT] Rithmic sin barras de hoy — usando solo historico.')
             df_merged = df_hist
 
         df_hasta_ahora = df_merged[df_merged.index <= cutoff]
     else:
-        print('Descargando %s (60d, 1h) desde yfinance...' % TICKER)
-        df = yf.download(TICKER, period='60d', interval='1h',
-                         auto_adjust=True, progress=False)
-        if hasattr(df.columns, 'levels'):
-            df.columns = [c[0] if isinstance(c, tuple) else c for c in df.columns]
-        df = df.dropna()
-        if df.empty:
-            print('Sin datos de yfinance — error de conexion o mercado cerrado.')
-            guardar_estado(estado)
-            return
-        if df.index.tz is None:
-            df.index = df.index.tz_localize('UTC')
-        df_hasta_ahora = df[df.index.tz_convert(ET) <= cutoff].tz_convert(ET)
+        # Modo sim — intentar Rithmic primero para que las señales sean comparables al live
+        df = None
+        try:
+            from live_exec import fetch_historical_bars as _fetch_hist, fetch_today_bars as _fetch_today_sim
+            df_hist_sim = _fetch_hist(90)
+            df_hoy_sim  = _fetch_today_sim()
+            if df_hist_sim is not None and not df_hist_sim.empty:
+                if df_hoy_sim is not None and not df_hoy_sim.empty:
+                    hoy_date = ahora_et.date()
+                    df_hist_sim = df_hist_sim[df_hist_sim.index.date < hoy_date]
+                    df_hist_sim = pd.concat([df_hist_sim, df_hoy_sim]).sort_index()
+                    df_hist_sim = df_hist_sim[~df_hist_sim.index.duplicated(keep='last')]
+                df = df_hist_sim
+                print('Sim: datos desde Rithmic (%d velas).' % len(df))
+        except Exception as _e_sim:
+            print('Sim: Rithmic no disponible (%s) — usando yfinance.' % _e_sim)
+
+        if df is None or df.empty:
+            print('Descargando %s (60d, 1h) desde yfinance...' % TICKER)
+            df = yf.download(TICKER, period='60d', interval='1h',
+                             auto_adjust=True, progress=False)
+            if hasattr(df.columns, 'levels'):
+                df.columns = [c[0] if isinstance(c, tuple) else c for c in df.columns]
+            df = df.dropna()
+            if df.empty:
+                print('Sin datos de yfinance — error de conexion o mercado cerrado.')
+                guardar_estado(estado)
+                return
+            if df.index.tz is None:
+                df.index = df.index.tz_localize('UTC')
+            df = df.tz_convert(ET)
+
+        df_hasta_ahora = df[df.index <= cutoff]
 
     if df_hasta_ahora.empty:
         print('Sin datos completos aun (mercado recien abrio).')
@@ -490,16 +503,17 @@ def main():
                     entrada_registrada = local_pos.get('entrada', 0)
                     if abs(fill_price_real - entrada_registrada) > TICK_SIZE:
                         orb_size = local_pos.get('orb_size', 0)
-                        stop_dist   = round(orb_size * ORB_STOP_MULT, 2)
-                        target_dist = round(orb_size * ORB_TARGET_MULT, 2)
-                        direccion   = local_pos.get('direccion', dir_real)
-                        sl_real = round(fill_price_real - stop_dist if direccion == 'LONG' else fill_price_real + stop_dist, 2)
-                        tp_real = round(fill_price_real + target_dist if direccion == 'LONG' else fill_price_real - target_dist, 2)
-                        print('[BOT] Fill real %.2f (registrado %.2f) — actualizando entrada/SL/TP en estado.' % (
+                        print('[BOT] Fill real %.2f (registrado %.2f) — actualizando entrada en estado.' % (
                             fill_price_real, entrada_registrada))
                         local_pos['entrada'] = round(fill_price_real, 2)
-                        local_pos['sl']      = sl_real
-                        local_pos['tp']      = tp_real
+                        if orb_size > 0:
+                            stop_dist   = round(orb_size * ORB_STOP_MULT, 2)
+                            target_dist = round(orb_size * ORB_TARGET_MULT, 2)
+                            direccion   = local_pos.get('direccion', dir_real)
+                            sl_real = round(fill_price_real - stop_dist if direccion == 'LONG' else fill_price_real + stop_dist, 2)
+                            tp_real = round(fill_price_real + target_dist if direccion == 'LONG' else fill_price_real - target_dist, 2)
+                            local_pos['sl'] = sl_real
+                            local_pos['tp'] = tp_real
                 if (local_pos.get('direccion') != dir_real or
                         local_pos.get('contratos') != qty_real):
                     # Local y Rithmic no coinciden en direccion/cantidad — estado ambiguo.
