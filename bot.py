@@ -16,7 +16,8 @@ import pandas as pd
 import yfinance as yf
 
 from config import (CUENTA, PLANES, TICKER, SYMBOL_LIVE, ESTADO_FILE, REPORTS_DIR,
-                    MAX_CONSEC_PERDIDAS, CIERRE_HORA, CIERRE_MIN)
+                    MAX_CONSEC_PERDIDAS, CIERRE_HORA, CIERRE_MIN,
+                    ORB_STOP_MULT, ORB_TARGET_MULT, TICK_SIZE)
 from estrategias import (signal_orb_entry, signal_ict_entry, gestionar_posicion,
                          signal_actividad_minima, cerrar_posicion_forzada)
 from filtro_noticias import check_noticia
@@ -401,7 +402,7 @@ def main():
         # Paso 1: cerrar en Rithmic si LIVE y todavia esta abierta.
         if LIVE_MODE and est == 'ORB_LIVE':
             try:
-                qty_real, dir_real = get_open_position()
+                qty_real, dir_real, _ = get_open_position()
                 if qty_real > 0:
                     print('[%s] Cerrando posicion real huerfana: %s x%d' % (est, dir_real, qty_real))
                     ok = flatten_position(qty_real, dir_real)
@@ -444,7 +445,7 @@ def main():
     # ══════════════════════════════════════════════
     if LIVE_MODE:
         try:
-            qty_real, dir_real = get_open_position()
+            qty_real, dir_real, fill_price_real = get_open_position()
             local_pos = estado['ORB_LIVE'].get('posicion_abierta')
 
             if qty_real > 0 and not local_pos:
@@ -484,6 +485,21 @@ def main():
                         estado['ORB_LIVE']['capital'])
                 estado['ORB_LIVE']['ya_opero_hoy'] = dia_str
             elif qty_real > 0 and local_pos:
+                # Sincronizar precio de entrada real desde Rithmic
+                if fill_price_real and fill_price_real > 0:
+                    entrada_registrada = local_pos.get('entrada', 0)
+                    if abs(fill_price_real - entrada_registrada) > TICK_SIZE:
+                        orb_size = local_pos.get('orb_size', 0)
+                        stop_dist   = round(orb_size * ORB_STOP_MULT, 2)
+                        target_dist = round(orb_size * ORB_TARGET_MULT, 2)
+                        direccion   = local_pos.get('direccion', dir_real)
+                        sl_real = round(fill_price_real - stop_dist if direccion == 'LONG' else fill_price_real + stop_dist, 2)
+                        tp_real = round(fill_price_real + target_dist if direccion == 'LONG' else fill_price_real - target_dist, 2)
+                        print('[BOT] Fill real %.2f (registrado %.2f) — actualizando entrada/SL/TP en estado.' % (
+                            fill_price_real, entrada_registrada))
+                        local_pos['entrada'] = round(fill_price_real, 2)
+                        local_pos['sl']      = sl_real
+                        local_pos['tp']      = tp_real
                 if (local_pos.get('direccion') != dir_real or
                         local_pos.get('contratos') != qty_real):
                     # Local y Rithmic no coinciden en direccion/cantidad — estado ambiguo.
@@ -550,7 +566,7 @@ def main():
         if LIVE_MODE and c.get('posicion_abierta') and es_eod:
             cierre_eod_ok = True
             try:
-                qty_real, dir_real = get_open_position()
+                qty_real, dir_real, _ = get_open_position()
                 if qty_real > 0:
                     print('[%s] EOD — cerrando posicion real %s x%d' % (estrategia, dir_real, qty_real))
                     cierre_eod_ok = flatten_position(qty_real, dir_real)

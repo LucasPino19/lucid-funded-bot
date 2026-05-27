@@ -106,7 +106,7 @@ async def _submit_bracket_async(entry_signal):
 
 
 async def _get_position_async():
-    """Devuelve (qty_neta, direccion) de la posicion abierta en SYMBOL_LIVE."""
+    """Devuelve (qty_neta, direccion, avg_open_fill_price) de la posicion abierta en SYMBOL_LIVE."""
     client = _make_client()
     await client.connect()
 
@@ -121,13 +121,14 @@ async def _get_position_async():
             continue
         long_qty  = getattr(pos, 'buy_qty',  0) or 0
         short_qty = getattr(pos, 'sell_qty', 0) or 0
+        fill_price = getattr(pos, 'avg_open_fill_price', None) or 0
         net = long_qty - short_qty
         if net > 0:
-            return net, 'LONG'
+            return net, 'LONG', float(fill_price)
         if net < 0:
-            return abs(net), 'SHORT'
+            return abs(net), 'SHORT', float(fill_price)
 
-    return 0, None
+    return 0, None, 0
 
 
 async def _flatten_async(qty, direccion):
@@ -353,12 +354,12 @@ def submit_bracket_entry(entry_signal):
 
 
 def get_open_position():
-    """Devuelve (qty, direccion) o (0, None) si flat."""
+    """Devuelve (qty, direccion, fill_price) o (0, None, 0) si flat."""
     try:
         return asyncio.run(_get_position_async())
     except Exception as e:
         print('[LIVE] ERROR al consultar posicion: %s' % e)
-        return 0, None
+        return 0, None, 0
 
 
 def flatten_position(qty, direccion):
