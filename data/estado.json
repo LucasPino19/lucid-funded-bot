@@ -3,15 +3,16 @@
     "estrategia": "ORB_LIVE",
     "cuenta": "25k",
     "capital_inicial": 25000,
-    "capital": 24690.0,
-    "ganancia_total": -310.0,
+    "capital": 24637.0,
+    "ganancia_total": -363.0,
     "ganancia_por_dia": {
       "2026-05-15": 19.0,
       "2026-05-18": -18.5,
       "2026-05-19": -38.5,
       "2026-05-21": -1.0,
-      "2026-05-26": -10.5,
-      "2026-05-27": -96.5
+      "2026-05-22": -83.5,
+      "2026-05-26": -99.5,
+      "2026-05-27": -141.0
     },
     "trades": [
       {
@@ -29,7 +30,7 @@
         "estrategia": "ORB",
         "direccion": "SHORT",
         "resultado": "reconciliacion_rithmic",
-        "puntos": -3.7,
+        "puntos": -3.5,
         "contratos": 1,
         "ganancia": -18.5,
         "capital": 25000.5
@@ -39,7 +40,7 @@
         "estrategia": "ORB",
         "direccion": "LONG",
         "resultado": "reconciliacion_rithmic",
-        "puntos": -7.7,
+        "puntos": -7.5,
         "contratos": 1,
         "ganancia": -38.5,
         "capital": 24962.0
@@ -49,40 +50,40 @@
         "estrategia": "ORB",
         "direccion": "LONG",
         "resultado": "reconciliacion_rithmic",
-        "puntos": -16.5,
+        "puntos": 0.6,
         "contratos": 1,
-        "ganancia": -82.5,
-        "capital": 24879.5
+        "ganancia": -1.0,
+        "capital": 24961.0
       },
       {
         "dia": "2026-05-22",
         "estrategia": "ORB",
         "direccion": "LONG",
         "resultado": "reconciliacion_rithmic",
-        "puntos": -16.5,
+        "puntos": -15.9,
         "contratos": 1,
-        "ganancia": -82.5,
-        "capital": 24797.0
+        "ganancia": -83.5,
+        "capital": 24877.5
       },
       {
         "dia": "2026-05-26",
         "estrategia": "ORB",
         "direccion": "SHORT",
         "resultado": "timeout",
-        "puntos": -0.25,
+        "puntos": -9.15,
         "contratos": 2,
-        "ganancia": -10.5,
-        "capital": 24786.5
+        "ganancia": -99.5,
+        "capital": 24778.0
       },
       {
         "dia": "2026-05-27",
         "estrategia": "ORB",
         "direccion": "SHORT",
         "resultado": "timeout",
-        "puntos": -18.5,
+        "puntos": -27.4,
         "contratos": 1,
-        "ganancia": -96.5,
-        "capital": 24690.0
+        "ganancia": -141.0,
+        "capital": 24637.0
       }
     ],
     "estado": "activa",
