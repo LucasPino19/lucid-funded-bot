@@ -238,6 +238,15 @@ def signal_orb_entry(df_completo, fecha_hoy, capital, orb_sizes_hist, force_cont
     if closes[i] > orb_high and precio > vwap_i:
         if close_pos < (1 - ORB_MOMENTUM_UMBRAL):
             return None, sizes_nuevos, 'Momentum debil LONG (close_pos=%.2f)' % close_pos
+        # Filtro ATH: bloquea LONG si el precio está dentro del 0.5% del máximo de 20 días
+        indices_prev = [j for j, ts in enumerate(fechas) if ts.astimezone(ET).date() < fecha_hoy]
+        dias_prev    = sorted({fechas[j].astimezone(ET).date() for j in indices_prev})
+        dias_ventana = set(dias_prev[-20:]) if len(dias_prev) >= 20 else set(dias_prev)
+        idx_ventana  = [j for j in indices_prev if fechas[j].astimezone(ET).date() in dias_ventana]
+        if idx_ventana:
+            max_20d = highs[idx_ventana].max()
+            if precio >= max_20d * 0.995:
+                return None, sizes_nuevos, 'Filtro ATH — precio cerca del max 20d (%.2f >= %.2f)' % (precio, max_20d * 0.995)
         entrada   = orb_high
         sl        = entrada - stop_dist
         tp        = entrada + target_dist
