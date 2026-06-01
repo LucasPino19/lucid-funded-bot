@@ -3,8 +3,8 @@
     "estrategia": "ORB_LIVE",
     "cuenta": "25k",
     "capital_inicial": 25000,
-    "capital": 24656.75,
-    "ganancia_total": -343.25,
+    "capital": 24471.25,
+    "ganancia_total": -528.75,
     "ganancia_por_dia": {
       "2026-05-15": 19.0,
       "2026-05-18": -18.5,
@@ -13,7 +13,8 @@
       "2026-05-22": -83.5,
       "2026-05-26": -99.5,
       "2026-05-27": -141.0,
-      "2026-05-28": 19.75
+      "2026-05-28": 19.75,
+      "2026-06-01": -185.5
     },
     "trades": [
       {
@@ -95,12 +96,22 @@
         "contratos": 1,
         "ganancia": 19.75,
         "capital": 24656.75
+      },
+      {
+        "dia": "2026-06-01",
+        "estrategia": "ORB",
+        "direccion": "LONG",
+        "resultado": "timeout",
+        "puntos": -17.75,
+        "contratos": 2,
+        "ganancia": -185.5,
+        "capital": 24471.25
       }
     ],
     "estado": "activa",
     "razon_fin": "",
-    "consecutivas_hoy": 0,
-    "ultimo_dia": "2026-05-28",
+    "consecutivas_hoy": 1,
+    "ultimo_dia": "2026-06-01",
     "orb_sizes": [
       40.75,
       39.25,
@@ -115,18 +126,7 @@
       15.25
     ],
     "obs_usados": [],
-    "posicion_abierta": {
-      "estrategia": "ORB",
-      "direccion": "LONG",
-      "entrada": 7626.0,
-      "sl": 7603.12,
-      "tp": 7648.88,
-      "contratos": 2,
-      "orb_size": 15.25,
-      "adx": 0,
-      "hora_entrada": 15,
-      "dia": "2026-06-01"
-    },
+    "posicion_abierta": null,
     "ya_opero_hoy": "2026-06-01",
     "peak_capital": 25019.0,
     "orb_size_dia": "2026-06-01",
