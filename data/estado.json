@@ -123,13 +123,14 @@
       21.5,
       40.5,
       34.25,
-      15.25
+      15.25,
+      26.0
     ],
     "obs_usados": [],
     "posicion_abierta": null,
     "ya_opero_hoy": "2026-06-01",
     "peak_capital": 25019.0,
-    "orb_size_dia": "2026-06-01",
+    "orb_size_dia": "2026-06-02",
     "wins_seguidos": 0,
     "entradas_bloqueadas": "2026-06-01"
   },
