@@ -151,9 +151,9 @@
     "posicion_abierta": {
       "estrategia": "ORB",
       "direccion": "SHORT",
-      "entrada": 7578.25,
-      "sl": 7599.25,
-      "tp": 7557.25,
+      "entrada": 7570.25,
+      "sl": 7591.25,
+      "tp": 7549.25,
       "contratos": 2,
       "orb_size": 14.0,
       "adx": 0,
