@@ -89,7 +89,7 @@ def _front_month_mes():
             first_day    = date(year, month_num, 1)
             first_friday = first_day + timedelta(days=(4 - first_day.weekday()) % 7)
             third_friday = first_friday + timedelta(days=14)
-            roll_date    = third_friday - timedelta(days=10)
+            roll_date    = third_friday - timedelta(days=15)
             if today < roll_date:
                 year_digit = str(year)[-1]
                 return 'MES%s%s' % (code, year_digit)
