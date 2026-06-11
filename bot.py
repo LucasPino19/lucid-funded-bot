@@ -627,6 +627,13 @@ def main():
             hay_noticia, nombre_ev = check_noticia(hoy)
             if hay_noticia:
                 print('[%s] Noticia alto impacto hoy (%s) — sin operaciones.' % (estrategia, nombre_ev))
+                # Registrar ORB size aunque no operemos (evita que días de noticias
+                # queden fuera del promedio de volatilidad histórica)
+                if estrategia in ('ORB_LIVE', 'ORB_SIM') and c.get('orb_size_dia') != dia_str:
+                    _, _orb_sz, _ = signal_orb_entry(df_hasta_ahora, hoy, c['capital'], c['orb_sizes'])
+                    if len(_orb_sz) > len(c.get('orb_sizes', [])):
+                        estado[estrategia]['orb_sizes']   = _orb_sz[-20:]
+                        estado[estrategia]['orb_size_dia'] = dia_str
                 continue
         else:
             print('[%s] ACTIVIDAD FORZADA prioritaria — ignorando filtro de noticias.' % estrategia)
