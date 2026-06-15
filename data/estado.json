@@ -168,9 +168,9 @@
     "posicion_abierta": {
       "estrategia": "ORB",
       "direccion": "LONG",
-      "entrada": 7640.5,
-      "sl": 7611.62,
-      "tp": 7669.38,
+      "entrada": 7645.25,
+      "sl": 7616.37,
+      "tp": 7674.13,
       "contratos": 1,
       "orb_size": 19.25,
       "adx": 0,
