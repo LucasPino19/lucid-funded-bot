@@ -32,6 +32,17 @@ if LIVE_MODE:
         print('[BOT] Continuando en modo simulacion.')
         LIVE_MODE = False
 
+# Variante C (entrada por stop en el nivel). Default OFF → comportamiento idéntico al actual.
+from config import ORB_STOP_ENTRY, ORB_STOP_DRYRUN
+if LIVE_MODE and ORB_STOP_ENTRY:
+    try:
+        from live_exec import submit_stop_bracket, cancel_entry_orders
+        from orb_stop_live import orquestar_orb_stop_live
+        print('[BOT] Variante C ACTIVA (entrada por stop en el nivel) — dry_run=%s' % ORB_STOP_DRYRUN)
+    except Exception as _import_err_c:
+        print('[BOT] ERROR importando variante C: %s — usando entrada normal (B).' % _import_err_c)
+        ORB_STOP_ENTRY = False
+
 ET   = ZoneInfo("America/New_York")
 PLAN = PLANES[CUENTA]
 
@@ -456,7 +467,9 @@ def main():
     # ══════════════════════════════════════════════
     # 3. RECONCILIACION RITHMIC ↔ ESTADO LOCAL (solo same-day, los cross-day ya se manejaron arriba)
     # ══════════════════════════════════════════════
-    if LIVE_MODE:
+    # Con variante C activa, la reconciliación de fills la hace orquestar_orb_stop_live
+    # (registra con el SL/TP correcto del setup C). Esta reconciliación usa signal_orb_entry (B).
+    if LIVE_MODE and not ORB_STOP_ENTRY:
         try:
             qty_real, dir_real, fill_price_real = get_open_position()
             local_pos = estado['ORB_LIVE'].get('posicion_abierta')
@@ -595,6 +608,18 @@ def main():
                 guardar_estado(estado)
                 continue
 
+        # ── Variante C: orquestar stops en reposo (coloca / detecta fill / cancela el opuesto) ──
+        # Corre ANTES de gestionar: si un stop filleó, registra posicion_abierta para que el
+        # bloque de gestión de abajo la maneje igual que una entrada normal.
+        if LIVE_MODE and ORB_STOP_ENTRY and estrategia == 'ORB_LIVE' and not es_eod:
+            try:
+                orquestar_orb_stop_live(
+                    estado, df_hasta_ahora, hoy, dia_str, ahora_et, ORB_STOP_DRYRUN,
+                    get_open_position, submit_stop_bracket, cancel_entry_orders)
+                c = estado[estrategia]  # refrescar referencia tras posible registro de posición
+            except Exception as _e_c:
+                print('[ORB-C] ERROR en orquestación: %s' % _e_c)
+
         # ── Gestionar posicion abierta ──
         if c.get('posicion_abierta'):
             trade_cerrado = gestionar_posicion(c['posicion_abierta'], df_hasta_ahora, hoy, force_eod=(es_eod or _force_gestionar))
@@ -681,7 +706,11 @@ def main():
         # ── Buscar entrada nueva (hasta 3 trades/día si el anterior ya cerró) ──
         trades_hoy      = sum(1 for t in c['trades'] if t['dia'] == dia_str)
         bloqueado       = c.get('entradas_bloqueadas') == dia_str
-        puede_entrar    = (trades_hoy < 3 and c.get('posicion_abierta') is None and not bloqueado)
+        # Variante C maneja la entrada de ORB_LIVE vía orquestar_orb_stop_live (arriba),
+        # así que se saltea la entrada normal (B) para esa estrategia.
+        skip_entrada_c  = (ORB_STOP_ENTRY and estrategia == 'ORB_LIVE')
+        puede_entrar    = (trades_hoy < 3 and c.get('posicion_abierta') is None
+                           and not bloqueado and not skip_entrada_c)
 
         if puede_entrar:
             if estrategia in ('ORB_LIVE', 'ORB_SIM'):

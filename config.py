@@ -51,6 +51,17 @@ ORB_VENTANA_H   = 15    # solo entrar antes de las 3:00pm ET (variante B — bac
 ORB_VENTANA_M   = 0
 ADX_MIN         = 20    # mercado en tendencia si ADX > 20
 
+# ── Variante C: entrada por STOP en el nivel (resuelve el slippage de market) ──
+# Backtest validado: B (market post-cierre) OOS -0.7% vs C (stop al nivel) OOS +59%.
+# Default OFF → el bot se comporta EXACTAMENTE como hoy. Activar via env var.
+#   ORB_STOP_ENTRY=1  → usa entrada por stop en el nivel (variante C).
+#   ORB_STOP_DRYRUN=1 → (solo afecta si C está ON) imprime las órdenes Rithmic SIN
+#                       enviarlas. Default ON la primera vez por seguridad: validar
+#                       params contra MotiveWave antes de poner DRYRUN=0 para operar real.
+import os as _os_orb
+ORB_STOP_ENTRY  = _os_orb.environ.get('ORB_STOP_ENTRY', '0') == '1'
+ORB_STOP_DRYRUN = _os_orb.environ.get('ORB_STOP_DRYRUN', '1') == '1'
+
 # ── Alineación de buckets diarios (EMA/ADX) ──
 # False (default): buckets 00:00 -> 00:00 ET — comportamiento histórico.
 # True: buckets 18:00 ET -> 17:00 ET — alineado a la sesión CME (globex open

@@ -105,6 +105,121 @@ async def _submit_bracket_async(entry_signal):
     return order_id
 
 
+# ──────────────────────────────────────────────
+# Variante C — STOP de entrada en el nivel (en reposo) + bracket SL/TP
+# ──────────────────────────────────────────────
+
+async def _submit_stop_bracket_async(direccion, trigger_price, sl, tp, contratos,
+                                     cancel_at=None):
+    """
+    Coloca una orden STOP_MARKET de entrada en `trigger_price` con bracket SL/TP.
+    cancel_at (datetime ET): si la orden no se llena, Rithmic la auto-cancela a esa hora.
+    Devuelve order_id o None.
+    """
+    client = _make_client()
+    await client.connect()
+
+    if direccion == 'LONG':
+        tx_type      = TransactionType.BUY
+        stop_ticks   = max(1, int(round((trigger_price - sl) / TICK_SIZE)))
+        target_ticks = max(1, int(round((tp - trigger_price) / TICK_SIZE)))
+    else:
+        tx_type      = TransactionType.SELL
+        stop_ticks   = max(1, int(round((sl - trigger_price) / TICK_SIZE)))
+        target_ticks = max(1, int(round((trigger_price - tp) / TICK_SIZE)))
+
+    order_id = 'LFBC_%s_%s' % (direccion, datetime.now(ET).strftime('%H%M%S'))
+    kwargs = dict(
+        order_id=order_id, symbol=SYMBOL_LIVE, exchange=EXCHANGE_LIVE,
+        qty=contratos, transaction_type=tx_type, order_type=OrderType.STOP_MARKET,
+        trigger_price=round(trigger_price, 2), stop_ticks=stop_ticks, target_ticks=target_ticks,
+    )
+    if cancel_at is not None:
+        kwargs['cancel_at'] = cancel_at
+
+    result = await client.submit_order(**kwargs)
+
+    if result is None:
+        print('[LIVE-C] ERROR: Rithmic devolvio None — stop %s NO enviado.' % direccion)
+        try: await client.disconnect()
+        except Exception: pass
+        return None
+    resp = result[0] if (isinstance(result, list) and result) else result
+    if resp is not None:
+        rp = getattr(resp, 'rp_code', None)
+        if rp is not None:
+            rp_list = list(rp) if hasattr(rp, '__iter__') and not isinstance(rp, (str, bytes)) else [rp]
+            if rp_list and rp_list != ['0']:
+                print('[LIVE-C] ALERTA: Rithmic rechazó stop %s — rp_code=%s' % (direccion, rp_list))
+                try: await client.disconnect()
+                except Exception: pass
+                return None
+    print('[LIVE-C] Stop %s aceptado: %s @ trigger %.2f | SL %d tk | TP %d tk' % (
+        direccion, order_id, trigger_price, stop_ticks, target_ticks))
+    try: await client.disconnect()
+    except Exception: pass
+    return order_id
+
+
+async def _cancel_entry_orders_async(order_ids):
+    """Cancela órdenes de entrada pendientes por order_id (las que aún no se llenaron)."""
+    client = _make_client()
+    await client.connect()
+    canceladas = []
+    try:
+        for oid in order_ids:
+            try:
+                await client.cancel_order(order_id=oid)
+                canceladas.append(oid)
+                print('[LIVE-C] Stop pendiente cancelado: %s' % oid)
+            except Exception as _e:
+                print('[LIVE-C] No se pudo cancelar %s: %s' % (oid, _e))
+    finally:
+        try: await client.disconnect()
+        except Exception: pass
+    return canceladas
+
+
+def submit_stop_bracket(direccion, trigger_price, sl, tp, contratos, cancel_at=None, dry_run=True):
+    """
+    API pública C. dry_run=True → imprime los parámetros SIN enviar (verificación segura).
+    Devuelve order_id (real) o un id ficticio 'DRYRUN_...' en dry-run, o None si falla.
+    """
+    if direccion == 'LONG':
+        st = max(1, int(round((trigger_price - sl) / TICK_SIZE)))
+        tt = max(1, int(round((tp - trigger_price) / TICK_SIZE)))
+        tx = 'BUY'
+    else:
+        st = max(1, int(round((sl - trigger_price) / TICK_SIZE)))
+        tt = max(1, int(round((trigger_price - tp) / TICK_SIZE)))
+        tx = 'SELL'
+    print('[%s] STOP_MARKET %s %s x%d | trigger=%.2f | SL=%d tk (%.2f) | TP=%d tk (%.2f) | cancel_at=%s' % (
+        'DRY-RUN' if dry_run else 'LIVE-C', tx, SYMBOL_LIVE, contratos, trigger_price,
+        st, sl, tt, tp, cancel_at.strftime('%H:%M') if cancel_at else 'none'))
+    if dry_run:
+        return 'DRYRUN_%s_%s' % (direccion, datetime.now(ET).strftime('%H%M%S'))
+    try:
+        return asyncio.run(_submit_stop_bracket_async(direccion, trigger_price, sl, tp, contratos, cancel_at))
+    except Exception as e:
+        print('[LIVE-C] ERROR al enviar stop %s: %s' % (direccion, e))
+        return None
+
+
+def cancel_entry_orders(order_ids, dry_run=True):
+    """Cancela los stops de entrada pendientes. dry_run → solo imprime."""
+    order_ids = [o for o in (order_ids or []) if o and not str(o).startswith('DRYRUN_')]
+    if not order_ids:
+        return []
+    if dry_run:
+        print('[DRY-RUN] cancelaría stops de entrada: %s' % order_ids)
+        return order_ids
+    try:
+        return asyncio.run(_cancel_entry_orders_async(order_ids))
+    except Exception as e:
+        print('[LIVE-C] ERROR al cancelar stops: %s' % e)
+        return []
+
+
 async def _get_position_async():
     """Devuelve (qty_neta, direccion, avg_open_fill_price) de la posicion abierta en SYMBOL_LIVE."""
     client = _make_client()

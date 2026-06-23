@@ -42,6 +42,13 @@ jobs:
           # Backtest (200 evals, mar-may 2026): pass 99% -> 100%, mediana 33 -> 27 dias,
           # WR 47% -> 61%, PF 4.75 -> 7.42. Rollback: poner '0' o borrar la linea.
           GLOBEX_ALIGNED:  '1'
+          # ── Variante C: entrada por STOP en el nivel (resuelve el slippage) ──
+          # ORB_STOP_ENTRY='1' activa C. ORB_STOP_DRYRUN='1' = IMPRIME las órdenes
+          # Rithmic SIN enviarlas (seguro, validar params en los logs vs MotiveWave).
+          # Para operar REAL: cambiar ORB_STOP_DRYRUN a '0'.
+          # Rollback total: poner ORB_STOP_ENTRY '0' → vuelve a la entrada market (B).
+          ORB_STOP_ENTRY:  '1'
+          ORB_STOP_DRYRUN: '1'
           RITHMIC_USER:    ${{ secrets.RITHMIC_USER }}
           RITHMIC_PASS:    ${{ secrets.RITHMIC_PASS }}
 
