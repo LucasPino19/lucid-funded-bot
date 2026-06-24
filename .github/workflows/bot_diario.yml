@@ -48,7 +48,7 @@ jobs:
           # Para operar REAL: cambiar ORB_STOP_DRYRUN a '0'.
           # Rollback total: poner ORB_STOP_ENTRY '0' → vuelve a la entrada market (B).
           ORB_STOP_ENTRY:  '1'
-          ORB_STOP_DRYRUN: '1'
+          ORB_STOP_DRYRUN: '0'
           RITHMIC_USER:    ${{ secrets.RITHMIC_USER }}
           RITHMIC_PASS:    ${{ secrets.RITHMIC_PASS }}
 
