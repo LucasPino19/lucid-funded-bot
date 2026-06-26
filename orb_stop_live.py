@@ -167,6 +167,16 @@ def orquestar_orb_stop_live(estado, df, hoy, dia_str, ahora_et, dry_run,
     id_short = submit_fn('SHORT', setup['orb_low'], setup['sl_short'], setup['tp_short'],
                          setup['contratos'], cancel_at, dry_run)
     if id_long is None and id_short is None:
+        try:
+            import live_exec
+            err = getattr(live_exec, 'ULTIMO_ERROR_C', None)
+        except Exception:
+            err = None
+        c['orb_c_diag'] = {'dia': dia_str, 'error': err,
+                           'long_trigger': setup['orb_high'], 'short_trigger': setup['orb_low'],
+                           'sl_long': setup['sl_long'], 'tp_long': setup['tp_long'],
+                           'contratos': setup['contratos']}
+        log('[ORB-C] FALLO al colocar stops — error=%s (volcado a estado.orb_c_diag)' % err)
         return 'fallo_colocacion'
     c['stops_pendientes'] = {'LONG': id_long, 'SHORT': id_short, 'dia': dia_str,
                              'setup': setup}

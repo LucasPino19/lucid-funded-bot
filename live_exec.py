@@ -109,6 +109,9 @@ async def _submit_bracket_async(entry_signal):
 # Variante C — STOP de entrada en el nivel (en reposo) + bracket SL/TP
 # ──────────────────────────────────────────────
 
+ULTIMO_ERROR_C = None  # detalle del último fallo de orden C (se vuelca a estado.json para diagnóstico)
+
+
 async def _submit_stop_bracket_async(direccion, trigger_price, sl, tp, contratos,
                                      cancel_at=None):
     """
@@ -140,6 +143,7 @@ async def _submit_stop_bracket_async(direccion, trigger_price, sl, tp, contratos
     result = await client.submit_order(**kwargs)
 
     if result is None:
+        globals()['ULTIMO_ERROR_C'] = 'rithmic_none (%s)' % direccion
         print('[LIVE-C] ERROR: Rithmic devolvio None — stop %s NO enviado.' % direccion)
         try: await client.disconnect()
         except Exception: pass
@@ -150,6 +154,7 @@ async def _submit_stop_bracket_async(direccion, trigger_price, sl, tp, contratos
         if rp is not None:
             rp_list = list(rp) if hasattr(rp, '__iter__') and not isinstance(rp, (str, bytes)) else [rp]
             if rp_list and rp_list != ['0']:
+                globals()['ULTIMO_ERROR_C'] = 'rp_code=%s (%s)' % (rp_list, direccion)
                 print('[LIVE-C] ALERTA: Rithmic rechazó stop %s — rp_code=%s' % (direccion, rp_list))
                 try: await client.disconnect()
                 except Exception: pass
@@ -201,6 +206,7 @@ def submit_stop_bracket(direccion, trigger_price, sl, tp, contratos, cancel_at=N
     try:
         return asyncio.run(_submit_stop_bracket_async(direccion, trigger_price, sl, tp, contratos, cancel_at))
     except Exception as e:
+        globals()['ULTIMO_ERROR_C'] = 'exc:%s (%s)' % (e, direccion)
         print('[LIVE-C] ERROR al enviar stop %s: %s' % (direccion, e))
         return None
 
