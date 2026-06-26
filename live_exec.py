@@ -142,23 +142,16 @@ async def _submit_stop_bracket_async(direccion, trigger_price, sl, tp, contratos
 
     result = await client.submit_order(**kwargs)
 
+    # async_rithmic LANZA excepción si Rithmic devuelve un rp_code de error real
+    # (ver base.py: raise si len(rp_code) y rp_code[0] != '0'). Si llegamos acá sin
+    # excepción, la orden fue ACEPTADA. Para órdenes STOP-bracket el rp_code vuelve
+    # vacío/anidado ([[]]) — NO es rechazo. Solo result=None es fallo real.
     if result is None:
         globals()['ULTIMO_ERROR_C'] = 'rithmic_none (%s)' % direccion
         print('[LIVE-C] ERROR: Rithmic devolvio None — stop %s NO enviado.' % direccion)
         try: await client.disconnect()
         except Exception: pass
         return None
-    resp = result[0] if (isinstance(result, list) and result) else result
-    if resp is not None:
-        rp = getattr(resp, 'rp_code', None)
-        if rp is not None:
-            rp_list = list(rp) if hasattr(rp, '__iter__') and not isinstance(rp, (str, bytes)) else [rp]
-            if rp_list and rp_list != ['0']:
-                globals()['ULTIMO_ERROR_C'] = 'rp_code=%s (%s)' % (rp_list, direccion)
-                print('[LIVE-C] ALERTA: Rithmic rechazó stop %s — rp_code=%s' % (direccion, rp_list))
-                try: await client.disconnect()
-                except Exception: pass
-                return None
     print('[LIVE-C] Stop %s aceptado: %s @ trigger %.2f | SL %d tk | TP %d tk' % (
         direccion, order_id, trigger_price, stop_ticks, target_ticks))
     try: await client.disconnect()
