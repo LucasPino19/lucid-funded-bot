@@ -152,8 +152,29 @@ async def _submit_stop_bracket_async(direccion, trigger_price, sl, tp, contratos
         try: await client.disconnect()
         except Exception: pass
         return None
-    print('[LIVE-C] Stop %s aceptado: %s @ trigger %.2f | SL %d tk | TP %d tk' % (
-        direccion, order_id, trigger_price, stop_ticks, target_ticks))
+
+    # Verificar que el stop REALMENTE quedó en Rithmic (no confiar solo en el ack —
+    # el rp_code de las STOP-bracket es ambiguo). Match por user_tag == order_id.
+    confirmado = None
+    for intento in range(2):
+        try:
+            await asyncio.sleep(1.5)
+            ordenes = await client.list_orders()
+            confirmado = any(getattr(o, 'user_tag', '') == order_id for o in (ordenes or []))
+            if confirmado:
+                break
+        except Exception as _e_chk:
+            print('[LIVE-C] No se pudo verificar stop %s (%d/2): %s' % (direccion, intento + 1, _e_chk))
+            confirmado = None
+    if confirmado is False:
+        globals()['ULTIMO_ERROR_C'] = 'no_aparece_en_list_orders (%s)' % direccion
+        print('[LIVE-C] ALERTA: stop %s NO aparece en Rithmic tras submit — NO colocado.' % direccion)
+        try: await client.disconnect()
+        except Exception: pass
+        return None
+    estado_v = 'CONFIRMADO en Rithmic' if confirmado else 'enviado (verificación incierta)'
+    print('[LIVE-C] Stop %s %s: %s @ trigger %.2f | SL %d tk | TP %d tk' % (
+        direccion, estado_v, order_id, trigger_price, stop_ticks, target_ticks))
     try: await client.disconnect()
     except Exception: pass
     return order_id
