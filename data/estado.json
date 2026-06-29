@@ -177,7 +177,6 @@
     "consecutivas_hoy": 0,
     "ultimo_dia": "2026-06-23",
     "orb_sizes": [
-      40.5,
       34.25,
       15.25,
       26.0,
@@ -196,13 +195,14 @@
       31.5,
       57.75,
       83.25,
-      38.5
+      38.5,
+      63.5
     ],
     "obs_usados": [],
     "posicion_abierta": null,
     "ya_opero_hoy": "2026-06-23",
     "peak_capital": 25019.0,
-    "orb_size_dia": "2026-06-26",
+    "orb_size_dia": "2026-06-29",
     "wins_seguidos": 0,
     "entradas_bloqueadas": "2026-06-23"
   },
