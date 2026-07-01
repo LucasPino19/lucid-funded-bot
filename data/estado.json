@@ -177,7 +177,6 @@
     "consecutivas_hoy": 0,
     "ultimo_dia": "2026-06-23",
     "orb_sizes": [
-      15.25,
       26.0,
       14.0,
       20.75,
@@ -196,28 +195,29 @@
       83.25,
       38.5,
       63.5,
-      26.25
+      26.25,
+      22.5
     ],
     "obs_usados": [],
     "posicion_abierta": null,
     "ya_opero_hoy": "2026-06-23",
     "peak_capital": 25019.0,
-    "orb_size_dia": "2026-06-30",
+    "orb_size_dia": "2026-07-01",
     "wins_seguidos": 0,
     "entradas_bloqueadas": "2026-06-23",
     "stops_pendientes": {
-      "LONG": "LFBC_LONG_123351",
-      "SHORT": "LFBC_SHORT_123356",
-      "dia": "2026-06-30",
+      "LONG": "LFBC_LONG_123408",
+      "SHORT": "LFBC_SHORT_123412",
+      "dia": "2026-07-01",
       "setup": {
-        "orb_high": 7541.75,
-        "orb_low": 7515.5,
-        "orb_size": 26.25,
+        "orb_high": 7555.5,
+        "orb_low": 7533.0,
+        "orb_size": 22.5,
         "contratos": 1,
-        "sl_long": 7502.38,
-        "tp_long": 7581.12,
-        "sl_short": 7554.88,
-        "tp_short": 7476.12
+        "sl_long": 7521.75,
+        "tp_long": 7589.25,
+        "sl_short": 7566.75,
+        "tp_short": 7499.25
       }
     }
   },
