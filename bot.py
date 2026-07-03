@@ -33,7 +33,7 @@ if LIVE_MODE:
         LIVE_MODE = False
 
 # Variante C (entrada por stop en el nivel). Default OFF → comportamiento idéntico al actual.
-from config import ORB_STOP_ENTRY, ORB_STOP_DRYRUN
+from config import ORB_STOP_ENTRY, ORB_STOP_DRYRUN, HOLIDAYS_NO_TRADE
 if LIVE_MODE and ORB_STOP_ENTRY:
     try:
         from live_exec import submit_stop_bracket, cancel_entry_orders
@@ -611,7 +611,7 @@ def main():
         # ── Variante C: orquestar stops en reposo (coloca / detecta fill / cancela el opuesto) ──
         # Corre ANTES de gestionar: si un stop filleó, registra posicion_abierta para que el
         # bloque de gestión de abajo la maneje igual que una entrada normal.
-        if LIVE_MODE and ORB_STOP_ENTRY and estrategia == 'ORB_LIVE' and not es_eod:
+        if LIVE_MODE and ORB_STOP_ENTRY and estrategia == 'ORB_LIVE' and not es_eod and dia_str not in HOLIDAYS_NO_TRADE:
             try:
                 orquestar_orb_stop_live(
                     estado, df_hasta_ahora, hoy, dia_str, ahora_et, ORB_STOP_DRYRUN,
@@ -709,8 +709,9 @@ def main():
         # Variante C maneja la entrada de ORB_LIVE vía orquestar_orb_stop_live (arriba),
         # así que se saltea la entrada normal (B) para esa estrategia.
         skip_entrada_c  = (ORB_STOP_ENTRY and estrategia == 'ORB_LIVE')
+        es_holiday      = dia_str in HOLIDAYS_NO_TRADE   # feriado / cierre temprano → no entrar
         puede_entrar    = (trades_hoy < 3 and c.get('posicion_abierta') is None
-                           and not bloqueado and not skip_entrada_c)
+                           and not bloqueado and not skip_entrada_c and not es_holiday)
 
         if puede_entrar:
             if estrategia in ('ORB_LIVE', 'ORB_SIM'):

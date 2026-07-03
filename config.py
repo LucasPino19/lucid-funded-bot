@@ -62,6 +62,14 @@ import os as _os_orb
 ORB_STOP_ENTRY  = _os_orb.environ.get('ORB_STOP_ENTRY', '0') == '1'
 ORB_STOP_DRYRUN = _os_orb.environ.get('ORB_STOP_DRYRUN', '1') == '1'
 
+# ── Días de NO operar (feriados / cierre temprano de CME) ──
+# El bot cierra EOD a las 16:30 ET; en días de cierre temprano no puede manejar la
+# posición a tiempo (Lucid exige cerrar antes del early close). En estas fechas NO
+# se colocan stops ni se entra. Formato 'YYYY-MM-DD' (ET). Agregar feriados futuros.
+HOLIDAYS_NO_TRADE = {
+    '2026-07-03',  # Independence Day early close (CME cierra 13:00 ET, Lucid 12:45)
+}
+
 # ── Alineación de buckets diarios (EMA/ADX) ──
 # False (default): buckets 00:00 -> 00:00 ET — comportamiento histórico.
 # True: buckets 18:00 ET -> 17:00 ET — alineado a la sesión CME (globex open
