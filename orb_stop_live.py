@@ -57,10 +57,10 @@ def computar_oco_setup(df, fecha_hoy, capital, orb_sizes_hist, riesgo_pct=None):
     if i0 is None:
         return None, orb_sizes_hist, 'Sin vela de sesion regular aun'
 
-    # ORB final solo después de que su vela cerró (debe existir una vela posterior)
-    if not any(i > i0 for i in idx_hoy):
-        return None, orb_sizes_hist, 'ORB aun no cerro'
-
+    # NO se exige una vela posterior al ORB (eso demoraba la colocación ~1h, dando
+    # tiempo a que el precio rompa un nivel → el stop de ese lado se rechaza por quedar
+    # del lado equivocado del mercado). El guard de horario en orquestar_orb_stop_live
+    # (ORB_CLOSE_HOUR) ya garantiza que la vela ORB cerró, así que su high/low son finales.
     orb_high = highs[i0]; orb_low = lows[i0]; orb_size = orb_high - orb_low
     if orb_size <= 0:
         return None, orb_sizes_hist, 'ORB size = 0'
@@ -162,10 +162,21 @@ def orquestar_orb_stop_live(estado, df, hoy, dia_str, ahora_et, dry_run,
         return 'sin_setup:%s' % motivo
 
     cancel_at = ahora_et.replace(hour=ORB_VENTANA_H, minute=ORB_VENTANA_M, second=0, microsecond=0)
-    id_long = submit_fn('LONG', setup['orb_high'], setup['sl_long'], setup['tp_long'],
-                        setup['contratos'], cancel_at, dry_run)
-    id_short = submit_fn('SHORT', setup['orb_low'], setup['sl_short'], setup['tp_short'],
-                         setup['contratos'], cancel_at, dry_run)
+    # Solo colocar un stop si queda del lado CORRECTO del precio actual: un buy-stop
+    # debe estar ARRIBA del mercado y un sell-stop DEBAJO. Si el precio ya rompió un
+    # nivel, ese stop se rechazaría (quedó del lado equivocado) → se omite ese lado.
+    precio = float(df['Close'].values[-1])
+    id_long = id_short = None
+    if precio < setup['orb_high']:
+        id_long = submit_fn('LONG', setup['orb_high'], setup['sl_long'], setup['tp_long'],
+                            setup['contratos'], cancel_at, dry_run)
+    else:
+        log('[ORB-C] LONG omitido: precio %.2f ya >= orb_high %.2f (buy-stop quedaría bajo mercado)' % (precio, setup['orb_high']))
+    if precio > setup['orb_low']:
+        id_short = submit_fn('SHORT', setup['orb_low'], setup['sl_short'], setup['tp_short'],
+                             setup['contratos'], cancel_at, dry_run)
+    else:
+        log('[ORB-C] SHORT omitido: precio %.2f ya <= orb_low %.2f (sell-stop quedaría sobre mercado)' % (precio, setup['orb_low']))
     if id_long is None and id_short is None:
         try:
             import live_exec
