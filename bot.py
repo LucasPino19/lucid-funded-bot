@@ -36,7 +36,7 @@ if LIVE_MODE:
 from config import ORB_STOP_ENTRY, ORB_STOP_DRYRUN, HOLIDAYS_NO_TRADE
 if LIVE_MODE and ORB_STOP_ENTRY:
     try:
-        from live_exec import submit_stop_bracket, cancel_entry_orders
+        from live_exec import submit_stop_bracket, cancel_entry_orders, cancelar_todo_pendiente
         from orb_stop_live import orquestar_orb_stop_live
         print('[BOT] Variante C ACTIVA (entrada por stop en el nivel) — dry_run=%s' % ORB_STOP_DRYRUN)
     except Exception as _import_err_c:
@@ -613,6 +613,10 @@ def main():
         # bloque de gestión de abajo la maneje igual que una entrada normal.
         if LIVE_MODE and ORB_STOP_ENTRY and estrategia == 'ORB_LIVE' and not es_eod and dia_str not in HOLIDAYS_NO_TRADE:
             try:
+                # Limpiar órdenes huérfanas (brackets colgados de días anteriores):
+                # si no hay posición ni stops colocados hoy, cualquier orden pendiente sobra.
+                if not c.get('posicion_abierta') and (c.get('stops_pendientes') or {}).get('dia') != dia_str:
+                    cancelar_todo_pendiente(ORB_STOP_DRYRUN)
                 orquestar_orb_stop_live(
                     estado, df_hasta_ahora, hoy, dia_str, ahora_et, ORB_STOP_DRYRUN,
                     get_open_position, submit_stop_bracket, cancel_entry_orders)

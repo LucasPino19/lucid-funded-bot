@@ -240,6 +240,43 @@ def cancel_entry_orders(order_ids, dry_run=True):
         return []
 
 
+async def _cancelar_todo_pendiente_async():
+    """Cancela TODAS las órdenes pendientes (working/pre-submitted) en SYMBOL_LIVE.
+    Se usa para limpiar órdenes huérfanas (ej. patas de bracket que quedaron colgadas)."""
+    client = _make_client()
+    await client.connect()
+    canceladas = 0
+    try:
+        ordenes = await client.list_orders()
+        for orden in (ordenes or []):
+            if getattr(orden, 'symbol', '') != SYMBOL_LIVE:
+                continue
+            bid = getattr(orden, 'basket_id', None)
+            if bid:
+                try:
+                    await client.cancel_order(basket_id=bid)
+                    canceladas += 1
+                    print('[LIVE-C] Orden huérfana cancelada: basket_id=%s' % bid)
+                except Exception as _e:
+                    print('[LIVE-C] No se pudo cancelar %s: %s' % (bid, _e))
+    finally:
+        try: await client.disconnect()
+        except Exception: pass
+    return canceladas
+
+
+def cancelar_todo_pendiente(dry_run=True):
+    """Limpia órdenes pendientes huérfanas en SYMBOL_LIVE. dry_run → solo imprime."""
+    if dry_run:
+        print('[DRY-RUN] limpiaría órdenes pendientes huérfanas en %s' % SYMBOL_LIVE)
+        return 0
+    try:
+        return asyncio.run(_cancelar_todo_pendiente_async())
+    except Exception as e:
+        print('[LIVE-C] ERROR al limpiar pendientes: %s' % e)
+        return 0
+
+
 async def _get_position_async():
     """Devuelve (qty_neta, direccion, avg_open_fill_price) de la posicion abierta en SYMBOL_LIVE."""
     client = _make_client()
