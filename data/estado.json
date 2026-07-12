@@ -3,8 +3,9 @@
     "estrategia": "ORB_LIVE",
     "cuenta": "25k",
     "capital_inicial": 25000,
-    "capital": 24864.25,
-    "ganancia_total": -135.75,
+    "capital": 24811.0,
+    "ganancia_total": -189.0,
+    "comisiones_acumuladas": -53.25,
     "ganancia_por_dia": {
       "2026-05-15": 19.0,
       "2026-05-18": -18.5,
@@ -181,6 +182,16 @@
         "contratos": 1,
         "ganancia": -84.0,
         "capital": 24864.25
+      },
+      {
+        "dia": "2026-07-09",
+        "estrategia": "ORB",
+        "direccion": "-",
+        "resultado": "reconciliacion_dashboard",
+        "puntos": 0,
+        "contratos": 0,
+        "ganancia": -53.25,
+        "capital": 24811.0
       }
     ],
     "estado": "activa",
