@@ -33,7 +33,7 @@ if LIVE_MODE:
         LIVE_MODE = False
 
 # Variante C (entrada por stop en el nivel). Default OFF → comportamiento idéntico al actual.
-from config import ORB_STOP_ENTRY, ORB_STOP_DRYRUN, HOLIDAYS_NO_TRADE
+from config import ORB_STOP_ENTRY, ORB_STOP_DRYRUN, HOLIDAYS_NO_TRADE, COMISION_RT
 if LIVE_MODE and ORB_STOP_ENTRY:
     try:
         from live_exec import submit_stop_bracket, cancel_entry_orders, cancelar_todo_pendiente
@@ -156,13 +156,23 @@ def aplicar_reglas(cuenta_estado, dia_str):
 # ══════════════════════════════════════════════
 
 def procesar_trade(cuenta_estado, trade, dia_str):
-    ganancia = trade['ganancia']
+    ganancia = trade['ganancia']   # P&L BRUTO — usado para clasificar win/loss (circuit breaker)
 
-    cuenta_estado['capital']        = round(cuenta_estado['capital']        + ganancia, 2)
-    cuenta_estado['ganancia_total'] = round(cuenta_estado['ganancia_total'] + ganancia, 2)
+    # ── Comisión Rithmic ──────────────────────────────────────────────────────
+    # Se descuenta del P&L monetario (capital / ganancia_total / ganancia_por_dia)
+    # para que el estado no driftee contra el balance real del dashboard.
+    # La CLASIFICACIÓN (TP/SL/timeout) abajo sigue usando el bruto → el circuit
+    # breaker se comporta idéntico a antes (cambio 100% aislado al P&L en dólares).
+    comision      = round(COMISION_RT * trade.get('contratos', 0), 2)
+    ganancia_neta = round(ganancia - comision, 2)
+
+    cuenta_estado['capital']        = round(cuenta_estado['capital']        + ganancia_neta, 2)
+    cuenta_estado['ganancia_total'] = round(cuenta_estado['ganancia_total'] + ganancia_neta, 2)
+    cuenta_estado['comisiones_acumuladas'] = round(
+        cuenta_estado.get('comisiones_acumuladas', 0) - comision, 2)
 
     prev = cuenta_estado['ganancia_por_dia'].get(dia_str, 0)
-    cuenta_estado['ganancia_por_dia'][dia_str] = round(prev + ganancia, 2)
+    cuenta_estado['ganancia_por_dia'][dia_str] = round(prev + ganancia_neta, 2)
 
     if trade['resultado'] == 'take_profit':
         cuenta_estado['consecutivas_hoy']  = 0
@@ -189,14 +199,16 @@ def procesar_trade(cuenta_estado, trade, dia_str):
     )
 
     cuenta_estado['trades'].append({
-        'dia':        dia_str,
-        'estrategia': trade['estrategia'],
-        'direccion':  trade['direccion'],
-        'resultado':  trade['resultado'],
-        'puntos':     trade['puntos'],
-        'contratos':  trade['contratos'],
-        'ganancia':   round(ganancia, 2),
-        'capital':    round(cuenta_estado['capital'], 2),
+        'dia':            dia_str,
+        'estrategia':     trade['estrategia'],
+        'direccion':      trade['direccion'],
+        'resultado':      trade['resultado'],
+        'puntos':         trade['puntos'],
+        'contratos':      trade['contratos'],
+        'ganancia':       ganancia_neta,          # NETO (bruto - comisión) → cuadra con capital
+        'ganancia_bruta': round(ganancia, 2),     # auditable
+        'comision':       comision,               # auditable
+        'capital':        round(cuenta_estado['capital'], 2),
     })
 
     nuevo_estado, razon = aplicar_reglas(cuenta_estado, dia_str)

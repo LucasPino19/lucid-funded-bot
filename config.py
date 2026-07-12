@@ -31,7 +31,15 @@ RIESGO_PCT     = 0.01   # 1% del capital — eval
 # FUNDED: cambiar a 0.0075 (0.75%) cuando pase a funded.
 # Backtest 50 sims × 12m: 0% blowup vs 10% con 1%. Income mediano $500/mes vs $735.
 # Tradeoff aceptado: menos plata, cero riesgo de explotar antes del primer pago.
-COSTO_CONTRATO = 4      # slippage $2.50 + comisión $1.50
+COSTO_CONTRATO = 4      # slippage $2.50 + comisión $1.50 (SOLO backtest)
+
+# ── Comisión LIVE (se descuenta del P&L real de cada trade en procesar_trade) ──
+# Calibrada contra el dashboard Rithmic: drift de -$53.25 / 19 round-turns = $2.80/RT
+# (= $1.40/lado). La variante C ya resuelve el slippage, así que el residual es
+# pura comisión. Se descuenta COMISION_RT * contratos por trade cerrado.
+# Env-overridable si Lucid cambia la tarifa: COMISION_RT=2.80
+import os as _os_com
+COMISION_RT = float(_os_com.environ.get('COMISION_RT', '2.80'))
 
 # ── Estrategia de payouts (funded) ──────────────────────────────────────────
 # MLL NO resetea tras payout (confirmado proptradingvibes.com).
