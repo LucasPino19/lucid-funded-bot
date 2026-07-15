@@ -57,7 +57,7 @@ ORB_HORA_INICIO = 9     # primera vela de sesión regular (9:30 ET)
 ORB_MIN_INICIO  = 30
 ORB_VENTANA_H   = 15    # solo entrar antes de las 3:00pm ET (variante B — backtest 500 evals)
 ORB_VENTANA_M   = 0
-ADX_MIN         = 20    # mercado en tendencia si ADX > 20
+ADX_MIN         = int(_os_com.environ.get('ADX_MIN', '18'))  # 18: sweep 2y OOS → +12 días op, mismo edge/DD que 20. Env-overridable (rollback: ADX_MIN=20)
 
 # ── Variante C: entrada por STOP en el nivel (resuelve el slippage de market) ──
 # Backtest validado: B (market post-cierre) OOS -0.7% vs C (stop al nivel) OOS +59%.
