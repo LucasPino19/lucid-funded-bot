@@ -212,7 +212,6 @@
     "consecutivas_hoy": 1,
     "ultimo_dia": "2026-07-28",
     "orb_sizes": [
-      107.0,
       65.5,
       63.75,
       19.25,
@@ -231,16 +230,26 @@
       53.5,
       26.25,
       40.75,
-      56.5
+      56.5,
+      35.75
     ],
     "obs_usados": [],
     "posicion_abierta": null,
     "ya_opero_hoy": "2026-07-28",
     "peak_capital": 322126.6,
-    "orb_size_dia": "2026-07-27",
+    "orb_size_dia": "2026-07-28",
     "wins_seguidos": 0,
     "entradas_bloqueadas": "2026-07-07",
-    "stops_pendientes": null
+    "stops_pendientes": null,
+    "orb_c_diag": {
+      "dia": "2026-07-28",
+      "error": "no_aparece_en_list_orders (SHORT)",
+      "long_trigger": 7455.75,
+      "short_trigger": 7420.0,
+      "sl_long": 7402.12,
+      "tp_long": 7509.38,
+      "contratos": 12
+    }
   },
   "ORB_SIM": {
     "estrategia": "ORB_SIM",
