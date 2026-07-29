@@ -1,12 +1,17 @@
+# ════════════════════════════════════════════════════════════════════════════
+# ⛔ BOT DESACTIVADO (2026-07-29) — no opera en vivo.
+# LIVE_MODE=false + ORB_STOP_ENTRY=0 + DRYRUN=1 → no puede mandar órdenes a Rithmic.
+# Cron automático deshabilitado. Solo corre si alguien lo dispara a mano.
+# Para reactivar: descomentar el schedule y poner LIVE_MODE='true' abajo.
+# ════════════════════════════════════════════════════════════════════════════
 name: LucidFlex Bot Intraday
 
 on:
   workflow_dispatch:
-    # Disparado por cron-job.org via GitHub API (mas confiable que GitHub cron)
-  schedule:
-    # Respaldo: cada hora durante mercado (lun-vie, 14:37-22:37 UTC = 10:37-18:37 EDT)
-    # Velas cierran a las :30 ET — :37 UTC da 7 min de margen para que Rithmic publique la barra.
-    - cron: '37 14-22 * * 1-5'
+    # Solo manual. El bot está en modo simulación (LIVE_MODE=false), no opera real.
+  # schedule:
+  #   # DESACTIVADO 2026-07-29 — sin corridas automáticas.
+  #   - cron: '37 14-22 * * 1-5'
 
 concurrency:
   group: lucid-bot
@@ -36,7 +41,7 @@ jobs:
       - name: Correr bot
         run: python bot.py
         env:
-          LIVE_MODE:       'true'
+          LIVE_MODE:       'false'   # ⛔ DESACTIVADO — no manda órdenes reales a Rithmic
           # Alinea EMA/ADX diaria a la sesion CME real (18:00 ET -> 17:00 ET)
           # en lugar de buckets calendario (00:00 ET -> 00:00 ET).
           # Backtest (200 evals, mar-may 2026): pass 99% -> 100%, mediana 33 -> 27 dias,
@@ -47,8 +52,8 @@ jobs:
           # Rithmic SIN enviarlas (seguro, validar params en los logs vs MotiveWave).
           # Para operar REAL: cambiar ORB_STOP_DRYRUN a '0'.
           # Rollback total: poner ORB_STOP_ENTRY '0' → vuelve a la entrada market (B).
-          ORB_STOP_ENTRY:  '1'
-          ORB_STOP_DRYRUN: '0'
+          ORB_STOP_ENTRY:  '0'   # ⛔ variante C apagada
+          ORB_STOP_DRYRUN: '1'   # ⛔ dry-run forzado (imprime, no envía)
           RITHMIC_USER:    ${{ secrets.RITHMIC_USER }}
           RITHMIC_PASS:    ${{ secrets.RITHMIC_PASS }}
 
