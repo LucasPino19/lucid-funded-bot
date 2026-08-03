@@ -282,7 +282,8 @@
       30.25,
       46.25,
       17.75,
-      48.5
+      48.5,
+      16.25
     ],
     "obs_usados": [],
     "posicion_abierta": null,
@@ -290,7 +291,7 @@
     "peak_capital": 25220.7,
     "wins_seguidos": 0,
     "entradas_bloqueadas": "",
-    "orb_size_dia": "2026-07-31",
+    "orb_size_dia": "2026-08-03",
     "comisiones_acumuladas": -2.8
   },
   "ICT_SIM": {
@@ -318,14 +319,26 @@
     ],
     "estado": "activa",
     "razon_fin": "",
-    "consecutivas_hoy": 1,
-    "ultimo_dia": "2026-07-31",
+    "consecutivas_hoy": 0,
+    "ultimo_dia": "2026-08-03",
     "orb_sizes": [],
     "obs_usados": [
+      "2026-05-29 13:00:00-04:00_bull",
       "2026-06-25 16:00:00-04:00_bear"
     ],
-    "posicion_abierta": null,
-    "ya_opero_hoy": "2026-07-31",
+    "posicion_abierta": {
+      "estrategia": "ICT",
+      "ob_clave": "2026-05-29 13:00:00-04:00_bull",
+      "tipo_ob": "bull",
+      "direccion": "LONG",
+      "entrada": 7598.0,
+      "sl": 7578.62,
+      "tp": 7644.5,
+      "contratos": 2,
+      "ob_size": 15.5,
+      "hora_entrada": 10
+    },
+    "ya_opero_hoy": "2026-08-03",
     "peak_capital": 25000,
     "wins_seguidos": 0,
     "entradas_bloqueadas": "",
