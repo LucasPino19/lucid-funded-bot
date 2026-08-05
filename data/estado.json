@@ -255,10 +255,11 @@
     "estrategia": "ORB_SIM",
     "cuenta": "25k",
     "capital_inicial": 25000,
-    "capital": 25220.7,
-    "ganancia_total": 220.7,
+    "capital": 25323.9,
+    "ganancia_total": 323.9,
     "ganancia_por_dia": {
-      "2026-07-30": 220.7
+      "2026-07-30": 220.7,
+      "2026-08-05": 103.2
     },
     "trades": [
       {
@@ -272,6 +273,18 @@
         "ganancia_bruta": 223.5,
         "comision": 2.8,
         "capital": 25220.7
+      },
+      {
+        "dia": "2026-08-05",
+        "estrategia": "ORB",
+        "direccion": "SHORT",
+        "resultado": "timeout",
+        "puntos": 22.0,
+        "contratos": 1,
+        "ganancia": 103.2,
+        "ganancia_bruta": 106.0,
+        "comision": 2.8,
+        "capital": 25323.9
       }
     ],
     "estado": "activa",
@@ -288,23 +301,13 @@
       19.75
     ],
     "obs_usados": [],
-    "posicion_abierta": {
-      "estrategia": "ORB",
-      "direccion": "SHORT",
-      "entrada": 7778.25,
-      "sl": 7839.38,
-      "tp": 7717.12,
-      "contratos": 1,
-      "orb_size": 40.75,
-      "adx": 24.4,
-      "hora_entrada": 13
-    },
+    "posicion_abierta": null,
     "ya_opero_hoy": "2026-08-05",
-    "peak_capital": 25220.7,
+    "peak_capital": 25323.9,
     "wins_seguidos": 0,
     "entradas_bloqueadas": "",
     "orb_size_dia": "2026-08-05",
-    "comisiones_acumuladas": -2.8
+    "comisiones_acumuladas": -5.6
   },
   "ICT_SIM": {
     "estrategia": "ICT_SIM",
