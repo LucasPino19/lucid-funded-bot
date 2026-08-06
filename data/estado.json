@@ -298,7 +298,8 @@
       48.5,
       16.25,
       23.75,
-      19.75
+      19.75,
+      12.5
     ],
     "obs_usados": [],
     "posicion_abierta": null,
@@ -306,7 +307,7 @@
     "peak_capital": 25323.9,
     "wins_seguidos": 0,
     "entradas_bloqueadas": "",
-    "orb_size_dia": "2026-08-05",
+    "orb_size_dia": "2026-08-06",
     "comisiones_acumuladas": -5.6
   },
   "ICT_SIM": {
