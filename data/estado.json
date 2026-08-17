@@ -420,15 +420,27 @@
     "estado": "activa",
     "razon_fin": "",
     "consecutivas_hoy": 0,
-    "ultimo_dia": "2026-08-10",
+    "ultimo_dia": "2026-08-17",
     "orb_sizes": [],
     "obs_usados": [
       "2026-05-29 13:00:00-04:00_bull",
       "2026-06-25 16:00:00-04:00_bear",
-      "2026-08-05 04:00:00-04:00_bull"
+      "2026-08-05 04:00:00-04:00_bull",
+      "2026-08-13 11:00:00-04:00_bull"
     ],
-    "posicion_abierta": null,
-    "ya_opero_hoy": "2026-08-10",
+    "posicion_abierta": {
+      "estrategia": "ICT",
+      "ob_clave": "2026-08-13 11:00:00-04:00_bull",
+      "tipo_ob": "bull",
+      "direccion": "LONG",
+      "entrada": 7822.0,
+      "sl": 7791.69,
+      "tp": 7894.75,
+      "contratos": 1,
+      "ob_size": 24.25,
+      "hora_entrada": 11
+    },
+    "ya_opero_hoy": "2026-08-17",
     "peak_capital": 25184.3,
     "wins_seguidos": 0,
     "entradas_bloqueadas": "",
