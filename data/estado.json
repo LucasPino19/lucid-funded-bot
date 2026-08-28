@@ -403,15 +403,16 @@
     "estrategia": "ICT_SIM",
     "cuenta": "25k",
     "capital_inicial": 25000,
-    "capital": 24305.85,
-    "ganancia_total": -694.15,
+    "capital": 23951.4,
+    "ganancia_total": -1048.6,
     "ganancia_por_dia": {
       "2026-07-31": -164.6,
       "2026-08-03": 348.9,
       "2026-08-10": -264.15,
       "2026-08-17": -158.35,
       "2026-08-18": -315.7,
-      "2026-08-25": -140.25
+      "2026-08-25": -140.25,
+      "2026-08-28": -354.45
     },
     "trades": [
       {
@@ -485,11 +486,23 @@
         "ganancia_bruta": -126.25,
         "comision": 14.0,
         "capital": 24305.85
+      },
+      {
+        "dia": "2026-08-28",
+        "estrategia": "ICT",
+        "direccion": "LONG",
+        "resultado": "stop_loss",
+        "puntos": -2.81,
+        "contratos": 17,
+        "ganancia": -354.45,
+        "ganancia_bruta": -306.85,
+        "comision": 47.6,
+        "capital": 23951.4
       }
     ],
-    "estado": "activa",
-    "razon_fin": "",
-    "consecutivas_hoy": 0,
+    "estado": "explotada",
+    "razon_fin": "Drawdown alcanzado \u2014 capital: $23951 | limite: $24184",
+    "consecutivas_hoy": 1,
     "ultimo_dia": "2026-08-28",
     "orb_sizes": [],
     "obs_usados": [
@@ -501,23 +514,12 @@
       "2026-08-13 11:00:00-04:00_bull",
       "2026-08-23 22:00:00-04:00_bear"
     ],
-    "posicion_abierta": {
-      "estrategia": "ICT",
-      "ob_clave": "2026-08-09 19:00:00-04:00_bull",
-      "tipo_ob": "bull",
-      "direccion": "LONG",
-      "entrada": 7769.0,
-      "sl": 7766.19,
-      "tp": 7775.75,
-      "contratos": 17,
-      "ob_size": 2.25,
-      "hora_entrada": 11
-    },
+    "posicion_abierta": null,
     "ya_opero_hoy": "2026-08-28",
     "peak_capital": 25184.3,
     "wins_seguidos": 0,
     "entradas_bloqueadas": "",
     "orb_size_dia": "",
-    "comisiones_acumuladas": -64.4
+    "comisiones_acumuladas": -112.0
   }
 }
