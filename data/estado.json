@@ -380,7 +380,7 @@
     "estado": "activa",
     "razon_fin": "",
     "consecutivas_hoy": 0,
-    "ultimo_dia": "2026-09-21",
+    "ultimo_dia": "2026-10-19",
     "orb_sizes": [
       30.25,
       46.25,
@@ -404,8 +404,19 @@
       14.0
     ],
     "obs_usados": [],
-    "posicion_abierta": null,
-    "ya_opero_hoy": "2026-09-21",
+    "posicion_abierta": {
+      "estrategia": "ORB",
+      "direccion": "SHORT",
+      "entrada": 7754.75,
+      "sl": 7758.75,
+      "tp": 7750.75,
+      "contratos": 1,
+      "orb_size": 0,
+      "adx": 0,
+      "_actividad": true,
+      "hora_entrada": 10
+    },
+    "ya_opero_hoy": "2026-10-19",
     "peak_capital": 25868.7,
     "wins_seguidos": 1,
     "entradas_bloqueadas": "",
